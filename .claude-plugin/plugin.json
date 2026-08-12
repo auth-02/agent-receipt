@@ -5,6 +5,5 @@
   "author": {
     "name": "Agent Receipt"
   },
-  "keywords": ["hooks", "session", "receipt", "summary", "cost", "tokens"],
-  "hooks": "./hooks/hooks.json"
+  "keywords": ["hooks", "session", "receipt", "summary", "cost", "tokens"]
 }
