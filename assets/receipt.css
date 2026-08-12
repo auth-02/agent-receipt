@@ -1,0 +1,217 @@
+/* Agent Receipt — Broadsheet look.
+   Standalone stylesheet for the generated receipt HTML. Linked, not inlined,
+   so the markup stays structure-only. Ported from the Broadsheet design
+   system (Source Serif 4, paper ground, cyan/magenta press accents). */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap');
+
+:root {
+  --color-bg: #f3f2f2; --color-text: #201e1d;
+  --color-accent: #0088b0; --color-accent-2: #d6006c;
+  --font-heading: "Source Serif 4", system-ui, serif;
+  --font-body: "Source Serif 4", system-ui, serif;
+  --radius-md: 2px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font-family: var(--font-body); }
+
+/* ── keyframes ─────────────────────────────────────────────────────────── */
+@keyframes ar-ink   { from { opacity: 0; transform: translateY(-4px); filter: blur(1.4px); }
+                      to   { opacity: 1; transform: none; filter: blur(0); } }
+@keyframes ar-roll  { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes ar-stamp { from { opacity: 0; transform: rotate(-13deg) scale(1.6); }
+                      60%  { opacity: 1; } to { opacity: 1; transform: rotate(-5deg) scale(1); } }
+@keyframes ar-blip  { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@keyframes ar-head  { 0% { top: -4%; opacity: 0; } 8% { opacity: .55; } 92% { opacity: .55; }
+                      100% { top: 100%; opacity: 0; } }
+
+/* Print-speed: every animation scales off --pr, set by a class on .wrap,
+   mirroring the design's Slow / Normal / Instant printSpeed control. */
+.wrap { --pr: 1; }
+.wrap.speed-slow    { --pr: 1.7; }
+.wrap.speed-instant { --pr: .001; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; }
+}
+
+/* ── layout ────────────────────────────────────────────────────────────── */
+.wrap { min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+        padding: 34px 16px 64px;
+        background: radial-gradient(120% 80% at 50% 0%,
+          color-mix(in srgb, var(--color-text) 4%, transparent), transparent 62%); }
+.kicker { display: flex; align-items: center; gap: 8px; font-size: 10.5px;
+          letter-spacing: .18em; text-transform: uppercase;
+          color: color-mix(in srgb, var(--color-text) 52%, transparent); margin-bottom: 22px;
+          animation: ar-ink calc(var(--pr) * .4s) ease-out calc(var(--pr) * .05s) both; }
+.blip { width: 5px; height: 5px; border-radius: 50%; background: var(--color-accent);
+        animation: ar-blip 1.8s ease-in-out infinite; }
+.paperwrap { filter: drop-shadow(0 14px 34px color-mix(in srgb, #2d2b2b 20%, transparent));
+             width: min(408px, 100%); }
+.paper { --zs: 13px; --zh: 7px; position: relative;
+  padding: calc(var(--zh) + 26px) 26px calc(var(--zh) + 24px);
+  background-color: #fbfaf8;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(32,30,29,.017) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(0deg, rgba(32,30,29,.012) 0 1px, transparent 1px 4px),
+    linear-gradient(90deg, rgba(32,30,29,.055), transparent 7%, transparent 93%, rgba(32,30,29,.055));
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zs) var(--zh) repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zs) var(--zh) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--zh)) no-repeat;
+  animation: ar-roll calc(var(--pr) * 3.6s) linear both; }
+.printhead { position: absolute; left: 0; right: 0; height: 26px; pointer-events: none;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-text) 22%, transparent));
+  animation: ar-head calc(var(--pr) * 3.6s) linear both; }
+
+/* ── type & rows ───────────────────────────────────────────────────────── */
+.title { font-family: var(--font-heading); font-weight: 600; font-size: 24px;
+         letter-spacing: .1em; text-transform: uppercase; line-height: 1.1; text-align: center; }
+.sub { text-align: center; font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase;
+       color: color-mix(in srgb, var(--color-text) 58%, transparent); margin-top: 8px; }
+.dom { text-align: center; font-size: 11.5px; font-style: italic;
+       color: color-mix(in srgb, var(--color-text) 50%, transparent); margin-top: 3px; }
+.dash { border-top: 1px dashed color-mix(in srgb, var(--color-text) 32%, transparent); }
+.dash.d1 { margin: 18px 0 14px; }
+.dash.d2 { margin: 16px 0 0; }
+.dash.d3 { margin: 18px 0 12px; }
+.sec { font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+       color: color-mix(in srgb, var(--color-text) 55%, transparent); margin: 20px 0 8px; }
+.row { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; margin-top: 5px; }
+.row .lead { flex: 1; border-bottom: 1px dotted color-mix(in srgb, var(--color-text) 34%, transparent);
+             transform: translateY(-3px); }
+.num { font-variant-numeric: tabular-nums; }
+.grow { flex: 1; }
+.sumrow { margin-top: 9px; padding-top: 8px;
+          border-top: 1px dotted color-mix(in srgb, var(--color-text) 26%, transparent); }
+.file { display: flex; align-items: baseline; gap: 10px; font-size: 12.5px; margin-top: 4px; }
+.file .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file .churn { font-variant-numeric: tabular-nums; white-space: nowrap;
+               color: color-mix(in srgb, var(--color-text) 72%, transparent); }
+.note { font-size: 12px; font-style: italic;
+        color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 20px; font-size: 13px; }
+.tools div { display: flex; align-items: baseline; gap: 6px; }
+.tools div > span:first-child { flex: 1; }
+.task { margin: 0; font-size: 13.5px; font-style: italic; line-height: 1.5; text-wrap: pretty; }
+
+/* ── totals & footer ───────────────────────────────────────────────────── */
+.total { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; }
+.total .lbl { font-family: var(--font-heading); font-weight: 600; font-size: 15px;
+              letter-spacing: .14em; text-transform: uppercase; }
+.total .amt { font-family: var(--font-heading); font-weight: 600; font-size: 30px;
+              line-height: 1; font-variant-numeric: tabular-nums; }
+.estimated { text-align: right; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+             color: color-mix(in srgb, var(--color-text) 50%, transparent); margin-top: 5px; }
+.stamp-wrap { display: flex; justify-content: center; margin: 22px 0 6px; }
+.stamp { border: 1.5px solid var(--color-accent-2); color: var(--color-accent-2);
+         padding: 5px 16px 4px; border-radius: var(--radius-md);
+         font-family: var(--font-heading); font-weight: 600; font-size: 17px;
+         letter-spacing: .22em; text-transform: uppercase; opacity: .88;
+         animation: ar-stamp calc(var(--pr) * .45s) cubic-bezier(.2,.9,.3,1) calc(var(--pr) * 3.4s) both; }
+.barcode { display: block; width: calc(100% + 52px); height: 52px; margin: 20px -26px 9px;
+           padding: 0 16px; background-repeat: no-repeat; background-origin: content-box;
+           background-clip: content-box; opacity: .88; }
+.cap { text-align: center; font-size: 10.5px; font-style: italic;
+       color: color-mix(in srgb, var(--color-text) 58%, transparent); margin-top: 6px; }
+.thanks { text-align: center; font-family: var(--font-heading); font-weight: 600; font-size: 14px;
+          letter-spacing: .1em; text-transform: uppercase; margin-top: 20px; }
+.foot { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 16px;
+        font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+        color: color-mix(in srgb, var(--color-text) 64%, transparent); }
+.foot .chk { width: 12px; height: 12px; border-radius: 50%;
+             border: 1px solid color-mix(in srgb, var(--color-text) 58%, transparent);
+             display: inline-flex; align-items: center; justify-content: center; font-size: 8px; }
+
+/* ── line-by-line ink cascade ──────────────────────────────────────────────
+   Each direct child of the paper fades in a beat after the last, so the sheet
+   reads as it rolls off the head. nth-child(1) is the print-head sweep. */
+
+.paper > *:nth-child(2) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.05s) both; }
+.paper > *:nth-child(3) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.10s) both; }
+.paper > *:nth-child(4) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.15s) both; }
+.paper > *:nth-child(5) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.20s) both; }
+.paper > *:nth-child(6) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.25s) both; }
+.paper > *:nth-child(7) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.30s) both; }
+.paper > *:nth-child(8) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.35s) both; }
+.paper > *:nth-child(9) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.40s) both; }
+.paper > *:nth-child(10) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.45s) both; }
+.paper > *:nth-child(11) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.50s) both; }
+.paper > *:nth-child(12) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.55s) both; }
+.paper > *:nth-child(13) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.60s) both; }
+.paper > *:nth-child(14) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.65s) both; }
+.paper > *:nth-child(15) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.70s) both; }
+.paper > *:nth-child(16) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.75s) both; }
+.paper > *:nth-child(17) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.80s) both; }
+.paper > *:nth-child(18) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.85s) both; }
+.paper > *:nth-child(19) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.90s) both; }
+.paper > *:nth-child(20) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 0.95s) both; }
+.paper > *:nth-child(21) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.00s) both; }
+.paper > *:nth-child(22) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.05s) both; }
+.paper > *:nth-child(23) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.10s) both; }
+.paper > *:nth-child(24) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.15s) both; }
+.paper > *:nth-child(25) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.20s) both; }
+.paper > *:nth-child(26) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.25s) both; }
+.paper > *:nth-child(27) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.30s) both; }
+.paper > *:nth-child(28) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.35s) both; }
+.paper > *:nth-child(29) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.40s) both; }
+.paper > *:nth-child(30) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.45s) both; }
+.paper > *:nth-child(31) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.50s) both; }
+.paper > *:nth-child(32) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.55s) both; }
+.paper > *:nth-child(33) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.60s) both; }
+.paper > *:nth-child(34) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.65s) both; }
+.paper > *:nth-child(35) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.70s) both; }
+.paper > *:nth-child(36) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.75s) both; }
+.paper > *:nth-child(37) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.80s) both; }
+.paper > *:nth-child(38) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.85s) both; }
+.paper > *:nth-child(39) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.90s) both; }
+.paper > *:nth-child(40) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 1.95s) both; }
+.paper > *:nth-child(41) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.00s) both; }
+.paper > *:nth-child(42) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.05s) both; }
+.paper > *:nth-child(43) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.10s) both; }
+.paper > *:nth-child(44) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.15s) both; }
+.paper > *:nth-child(45) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.20s) both; }
+.paper > *:nth-child(46) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.25s) both; }
+.paper > *:nth-child(47) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.30s) both; }
+.paper > *:nth-child(48) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.35s) both; }
+.paper > *:nth-child(49) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.40s) both; }
+.paper > *:nth-child(50) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.45s) both; }
+.paper > *:nth-child(51) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.50s) both; }
+.paper > *:nth-child(52) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.55s) both; }
+.paper > *:nth-child(53) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.60s) both; }
+.paper > *:nth-child(54) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.65s) both; }
+.paper > *:nth-child(55) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.70s) both; }
+.paper > *:nth-child(56) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.75s) both; }
+.paper > *:nth-child(57) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.80s) both; }
+.paper > *:nth-child(58) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.85s) both; }
+.paper > *:nth-child(59) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.90s) both; }
+.paper > *:nth-child(60) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 2.95s) both; }
+.paper > *:nth-child(61) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.00s) both; }
+.paper > *:nth-child(62) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.05s) both; }
+.paper > *:nth-child(63) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.10s) both; }
+.paper > *:nth-child(64) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.15s) both; }
+.paper > *:nth-child(65) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.20s) both; }
+.paper > *:nth-child(66) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.25s) both; }
+.paper > *:nth-child(67) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(68) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(69) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(70) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(71) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(72) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(73) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(74) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(75) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(76) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(77) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(78) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(79) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(80) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(81) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(82) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(83) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(84) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(85) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(86) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(87) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(88) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }
+.paper > *:nth-child(89) { animation: ar-ink calc(var(--pr) * .34s) ease-out calc(var(--pr) * 3.30s) both; }

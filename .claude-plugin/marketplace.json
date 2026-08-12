@@ -1,0 +1,13 @@
+{
+  "name": "agent-receipt-marketplace",
+  "owner": {
+    "name": "Agent Receipt"
+  },
+  "plugins": [
+    {
+      "name": "agent-receipt",
+      "source": "./",
+      "description": "Prints a thermal-receipt session summary when a Claude Code session ends."
+    }
+  ]
+}

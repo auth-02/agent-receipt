@@ -1,0 +1,10 @@
+{
+  "name": "agent-receipt",
+  "version": "1.0.0",
+  "description": "Prints a thermal-receipt session summary when a Claude Code session ends — duration, files changed, tools used, tests, git activity, tokens and an estimated cost — as terminal art plus a saved HTML/TXT receipt.",
+  "author": {
+    "name": "Agent Receipt"
+  },
+  "keywords": ["hooks", "session", "receipt", "summary", "cost", "tokens"],
+  "hooks": "./hooks/hooks.json"
+}
