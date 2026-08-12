@@ -1,0 +1,1 @@
+SessionEnd reliability fix. Committed as auth-02 <shindeathrv02@gmail.com>. Writes HTML/TXT before printing so /exit always produces a receipt; exit path prints instantly (no animation). Distributed to installs on plugin update via origin/main.
