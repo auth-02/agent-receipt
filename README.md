@@ -4,9 +4,16 @@ A Claude Code plugin that prints a **thermal-receipt session summary** when a
 coding session ends — the way a till prints a receipt when you check out.
 
 It hooks the session lifecycle, reconstructs what happened from the session
-transcript and git, and "prints" a receipt: the task, duration, files changed,
-tools used, tests, git activity, token usage, and an estimated cost — stamped
-**SHIPPED**, with a scannable Code 128 barcode of the resume command.
+transcript and git, and "prints" a receipt: the task, duration, token usage, and
+what the session *would* cost — stamped **SHIPPED**, with a scannable Code 128
+barcode of the resume command.
+
+**About the cost.** Most people run Claude Code on a flat-fee plan (Pro / Max /
+Team), so a session isn't actually billed per token. The receipt's figure is a
+*hypothetical* — "what this session would cost if your agent were on
+pay-as-you-go API pricing" — computed at API rates and labelled **not charged
+to your plan**. That contrast is the point: it shows the value your flat plan is
+absorbing, not a bill.
 
 ```
 ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱
@@ -20,7 +27,9 @@ Receipt no.·······AR-2608-3942
 Date·······12 Aug 2026 · 20:17
 Workspace···········~/src/orbit-api
 ...
-TOTAL···················$0.18 est.
+IF BILLED PAY-AS-YOU-GO····$0.18
+    Estimated API cost · USD
+    not charged to your plan
 
            [ SHIPPED ]
 ```
@@ -59,10 +68,12 @@ The receipt is recovered from the session **transcript** (`transcript_path` in
 the hook payload):
 
 - **Model / agent version** — from the assistant messages.
-- **Tokens & cost** — summed `usage` fields, priced per model from the table in
-  `_receipt.py` (`claude-opus-4-8` → Opus rates, etc.), with a family fallback.
-  `Subtotal` prices every token at the input rate; `Cache discount` is the
-  saving from cached reads; `Total` is the actual estimate.
+- **Tokens & hypothetical cost** — summed `usage` fields, priced per model at
+  **API pay-as-you-go rates** from the table in `_receipt.py` (`claude-opus-4-8`
+  → Opus rates, etc.), with a family fallback. `Subtotal` prices every token at
+  the input rate; `Cache discount` is the saving from cached reads; the total is
+  what the session *would* cost on the API — explicitly **not** a charge to a
+  flat Pro/Max/Team plan.
 - **Task** — Claude Code's own session title (the `ai-title`), falling back to
   the first user prompt.
 

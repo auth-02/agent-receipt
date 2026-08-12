@@ -467,7 +467,9 @@ def build_ansi(ctx, color):
     lines.append(rule())
     lines.append(kv("Subtotal", fmt_money(ctx["subtotal"])))
     lines.append(kv("Cache discount", fmt_money(-ctx["discount"])))
-    lines.append(c(BOLD, kv("TOTAL", fmt_money(ctx["total"]) + " est.")))
+    lines.append(c(BOLD, kv("IF BILLED PAY-AS-YOU-GO", fmt_money(ctx["total"]))))
+    lines.append(c(DIM, center("Estimated API cost · USD")))
+    lines.append(c(DIM, center("not charged to your plan")))
     lines.append("")
     lines.append(c(MAG, center(f"[ {ctx['stamp'].upper()} ]")))
     lines.append("")
@@ -554,7 +556,8 @@ def render_text(ctx):
     rows += [
         f"Tokens       {fmt_int(ctx['tok_total'])} total "
         f"(in {fmt_int(ctx['tok_in'])} / out {fmt_int(ctx['tok_out'])})",
-        f"Total        {fmt_money(ctx['total'])} estimated",
+        f"API cost     {fmt_money(ctx['total'])} if billed pay-as-you-go (est.)",
+        "             not charged to your plan — flat fee covers it",
         "",
         ("STATUS: ONGOING — session in progress." if ctx.get("ongoing")
          else "STATUS: SHIPPED — thank you for shipping."),
@@ -676,9 +679,10 @@ def render_html(ctx):
         ("Subtotal", fmt_money(ctx["subtotal"]), True),
         ("Cache discount", fmt_money(-ctx["discount"]), True),
     ])}
-    <div class="total"><span class="lbl">Total</span><span class="grow"></span>
+    <div class="sec">If billed pay-as-you-go (API)</div>
+    <div class="total"><span class="lbl">Est. cost</span><span class="grow"></span>
       <span class="amt">{fmt_money(ctx['total'])}</span></div>
-    <div class="estimated">Estimated · USD</div>
+    <div class="estimated">Estimated API cost · USD · not charged to your plan</div>
     <div class="stamp-wrap"><div class="stamp">{ctx['stamp']}</div></div>
     <div class="barcode" style="background-image:{barcode};"
       title="{html.escape(ctx['resume_cmd'])}"></div>

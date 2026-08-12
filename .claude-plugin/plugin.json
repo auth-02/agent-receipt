@@ -1,7 +1,7 @@
 {
   "name": "agent-receipt",
   "version": "1.0.0",
-  "description": "Prints a thermal-receipt session summary when a Claude Code session ends — duration, files changed, tools used, tests, git activity, tokens and an estimated cost — as terminal art plus a saved HTML/TXT receipt.",
+  "description": "Prints a thermal-receipt session summary when a Claude Code session ends — task, duration, token usage, and what the session would cost at pay-as-you-go API rates (a hypothetical, not a charge to your flat plan) — as terminal art plus a saved HTML/TXT receipt.",
   "author": {
     "name": "Agent Receipt"
   },
