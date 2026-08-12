@@ -92,6 +92,20 @@ Three sections are **opt-in** (off by default — flip a constant to include the
 If the transcript is missing, or a section's data isn't available, the receipt
 still prints — it just drops what it can't fill.
 
+### Seeing it on `/exit`
+
+The receipt is **always saved** to `~/.claude/agent-receipt/receipts/` on every
+graceful exit (`/exit`, `/quit`, Ctrl-D). If you run the fullscreen TUI
+(`"tui": "fullscreen"`), the terminal print is wiped when Claude restores your
+screen — so open the saved HTML instead. Add this alias to see the latest:
+
+```bash
+# ~/.zshrc — then run `receipt` after any session
+alias receipt='open "$(ls -t ~/.claude/agent-receipt/receipts/*.html | head -1)"'
+```
+
+(Linux: swap `open` for `xdg-open`.)
+
 ## The `/agent-receipt` command
 
 Type `/agent-receipt` any time during a session to print its receipt-so-far
