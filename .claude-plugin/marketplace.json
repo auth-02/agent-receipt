@@ -1,5 +1,6 @@
 {
   "name": "agent-receipt-marketplace",
+  "description": "Session-summary tooling for Claude Code — prints a thermal-receipt recap of each session.",
   "owner": {
     "name": "Agent Receipt"
   },
