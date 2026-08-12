@@ -680,9 +680,9 @@ def render_html(ctx):
         ("Cache discount", fmt_money(-ctx["discount"]), True),
     ])}
     <div class="sec">If billed pay-as-you-go (API)</div>
-    <div class="total"><span class="lbl">Est. cost</span><span class="grow"></span>
+    <div class="total"><span class="lbl">Est. API cost</span><span class="grow"></span>
       <span class="amt">{fmt_money(ctx['total'])}</span></div>
-    <div class="estimated">Estimated API cost · USD · not charged to your plan</div>
+    <div class="estimated">USD</div>
     <div class="stamp-wrap"><div class="stamp">{ctx['stamp']}</div></div>
     <div class="barcode" style="background-image:{barcode};"
       title="{html.escape(ctx['resume_cmd'])}"></div>

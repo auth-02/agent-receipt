@@ -29,7 +29,6 @@ Workspace···········~/src/orbit-api
 ...
 IF BILLED PAY-AS-YOU-GO····$0.18
     Estimated API cost · USD
-    not charged to your plan
 
            [ SHIPPED ]
 ```
@@ -97,15 +96,21 @@ instead of **SHIPPED**.
 
 ## Install
 
-**As a plugin (recommended) — zero further config.** The plugin directory
-doubles as a single-plugin marketplace. Once installed, the hooks in
-`hooks/hooks.json` activate automatically the moment the plugin is enabled — you
-never touch `settings.json`, and every session from then on prints its receipt.
+**As a plugin (recommended) — zero further config.** The repo doubles as a
+single-plugin marketplace. Once installed, the hooks in `hooks/hooks.json`
+activate automatically the moment the plugin is enabled — you never touch
+`settings.json`, and every session from then on prints its receipt.
+
+From GitHub:
 
 ```
-/plugin marketplace add /Users/user/agents/agent-receipt
+/plugin marketplace add auth-02/agent-receipt
 /plugin install agent-receipt@agent-receipt-marketplace
 ```
+
+(`auth-02/agent-receipt` is GitHub `owner/repo` shorthand; the full
+`https://github.com/auth-02/agent-receipt.git` URL works too. For local
+development, point `marketplace add` at a checkout path instead.)
 
 **Or wire the hooks directly** in `~/.claude/settings.json` (no plugin system):
 
