@@ -163,6 +163,41 @@ def _user_text(content):
     return None
 
 
+# Wrapper tags Claude Code injects around slash-commands and local command
+# output. When a user turn is one of these it's boilerplate, not a real prompt.
+_WRAP_TAGS = (
+    "local-command-caveat", "command-name", "command-message", "command-args",
+    "command-contents", "local-command-stdout", "system-reminder",
+)
+_WRAP_RE = re.compile(r"<(" + "|".join(_WRAP_TAGS) + r")\b[^>]*>.*?</\1>", re.S | re.I)
+
+
+def _clean_prompt(text):
+    """Strip Claude Code caveat/command wrappers and return the human-typed
+    remainder — or '' if the turn was pure boilerplate or a bare slash-command."""
+    if not text:
+        return ""
+    t = _WRAP_RE.sub("", text)                       # drop wrapper tag blocks
+    t = re.sub(r"</?[a-z-]+>", "", t, flags=re.I)     # drop stray lone tags
+    t = re.sub(r"Caveat:.*", "", t, flags=re.S | re.I)  # drop caveat sentences
+    t = re.sub(r"\s+", " ", t).strip()
+    if re.fullmatch(r"/[A-Za-z0-9:_-]+", t or ""):    # a lone slash-command
+        return ""
+    return t
+
+
+def _derive_title(text):
+    """Synthesize a concise, headline-style task from the user's own prompt when
+    Claude Code hasn't generated an ai-title yet — first sentence, capped."""
+    if not text:
+        return None
+    head = re.split(r"(?<=[.!?])\s|\n", text, 1)[0].strip() or text
+    head = re.sub(r"\s+", " ", head)
+    if len(head) > 72:
+        head = head[:69].rstrip() + "…"
+    return head[:1].upper() + head[1:] if head else None
+
+
 def parse_transcript(path):
     stats = {
         "model": None, "version": None, "title": None,
@@ -221,7 +256,7 @@ def parse_transcript(path):
                             stats["tools"][name] = stats["tools"].get(name, 0) + 1
             elif typ == "user":
                 if stats["first_user"] is None:
-                    txt = _user_text(msg.get("content"))
+                    txt = _clean_prompt(_user_text(msg.get("content")))
                     if txt:
                         stats["first_user"] = txt
     return stats
@@ -330,7 +365,7 @@ def build_context(hook):
     digits = int(hashlib.md5(session_id.encode()).hexdigest(), 16) % 10000
     receipt_no = f"AR-{local_end:%y%m}-{digits:04d}"
 
-    task = stats["title"] or stats["first_user"] or "—"
+    task = stats["title"] or _derive_title(stats["first_user"]) or "—"
     task = re.sub(r"\s+", " ", task).strip()
     if len(task) > 240:
         task = task[:237].rstrip() + "…"

@@ -79,8 +79,9 @@ the hook payload):
   the input rate; `Cache discount` is the saving from cached reads; the total is
   what the session *would* cost on the API — explicitly **not** a charge to a
   flat Pro/Max/Team plan.
-- **Task** — Claude Code's own session title (the `ai-title`), falling back to
-  the first user prompt.
+- **Task** — Claude Code's own session title (the `ai-title`); if none exists
+  yet, a headline is synthesized from the first *real* user prompt (caveat and
+  slash-command boilerplate are skipped).
 
 Three sections are **opt-in** (off by default — flip a constant to include them):
 
