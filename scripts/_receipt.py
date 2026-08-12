@@ -172,6 +172,7 @@ def parse_transcript(path):
     }
     if not path or not os.path.exists(path):
         return stats
+    seen_msg_ids = set()
     with open(path, "r", errors="replace") as f:
         for line in f:
             line = line.strip()
@@ -198,9 +199,15 @@ def parse_transcript(path):
 
             msg = e.get("message") or {}
             if typ == "assistant":
+                mid = msg.get("id")
+                if mid and mid in seen_msg_ids:
+                    continue
+                if mid:
+                    seen_msg_ids.add(mid)
+                model = msg.get("model")
+                if model and model != "<synthetic>":
+                    stats["model"] = model
                 stats["turns"] += 1
-                if msg.get("model"):
-                    stats["model"] = msg["model"]
                 u = msg.get("usage") or {}
                 stats["input"] += u.get("input_tokens", 0) or 0
                 stats["output"] += u.get("output_tokens", 0) or 0

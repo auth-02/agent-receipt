@@ -36,6 +36,12 @@ IF BILLED PAY-AS-YOU-GO····$0.18
 The design comes from the *Agent Receipt* concept in Claude Design; this plugin
 is the working implementation of it.
 
+## Demo
+
+The saved HTML receipt printing and scrolling in the browser:
+
+![Agent Receipt printing in the browser](demo/agent-receipt.gif)
+
 ## What it produces
 
 Every time a session ends the plugin:
