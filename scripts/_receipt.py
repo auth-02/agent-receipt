@@ -172,16 +172,29 @@ _WRAP_TAGS = (
 _WRAP_RE = re.compile(r"<(" + "|".join(_WRAP_TAGS) + r")\b[^>]*>.*?</\1>", re.S | re.I)
 
 
+# A Claude Code slash-command token at the very start of a turn: /name or
+# /plugin:name, optionally followed by args/output. Command names are
+# lowercase, which keeps this from matching an absolute path like /Users/... .
+_SLASH_CMD_RE = re.compile(r"^/[a-z][a-z0-9-]*(?::[a-z0-9-]+)?(?:\s|$)")
+
+
 def _clean_prompt(text):
     """Strip Claude Code caveat/command wrappers and return the human-typed
-    remainder — or '' if the turn was pure boilerplate or a bare slash-command."""
+    remainder — or '' if the turn was pure boilerplate or a slash-command.
+
+    A turn that *begins* with a slash-command token is a command invocation or
+    its pasted output (e.g. an /agent-receipt dump), not a human-authored
+    prompt — the whole turn is discarded so the task line falls through to the
+    first genuine prompt instead of echoing command/tool chatter."""
     if not text:
         return ""
     t = _WRAP_RE.sub("", text)                       # drop wrapper tag blocks
     t = re.sub(r"</?[a-z-]+>", "", t, flags=re.I)     # drop stray lone tags
     t = re.sub(r"Caveat:.*", "", t, flags=re.S | re.I)  # drop caveat sentences
     t = re.sub(r"\s+", " ", t).strip()
-    if re.fullmatch(r"/[A-Za-z0-9:_-]+", t or ""):    # a lone slash-command
+    if not t:
+        return ""
+    if _SLASH_CMD_RE.match(t):                        # a slash-command turn
         return ""
     return t
 
