@@ -23,6 +23,23 @@ def _first_line_cwd(path):
     return None
 
 
+def find_by_session_id():
+    """Authoritative: locate THIS session's transcript by its id.
+
+    Claude Code exports the current session id on every command it runs
+    (CLAUDE_CODE_SESSION_ID); AGENT_RECEIPT_SESSION_ID lets a caller override.
+    This is independent of the working directory, so it never mis-targets a
+    sibling session the way the cwd heuristic can when the receipt is run from
+    a subdirectory of the session root.
+    """
+    sid = os.environ.get("AGENT_RECEIPT_SESSION_ID") or os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not sid:
+        return None
+    root = os.path.join(os.path.expanduser("~"), ".claude", "projects")
+    hits = glob.glob(os.path.join(root, "*", sid + ".jsonl"))
+    return hits[0] if hits else None
+
+
 def find_transcript(cwd):
     root = os.path.join(os.path.expanduser("~"), ".claude", "projects")
     if not os.path.isdir(root):
@@ -42,7 +59,9 @@ def find_transcript(cwd):
 
 def main():
     cwd = os.getcwd()
-    transcript = find_transcript(cwd)
+    # Prefer the session id Claude Code exports (cwd-independent); fall back to
+    # the cwd heuristic only when it is absent.
+    transcript = find_by_session_id() or find_transcript(cwd)
     if not transcript:
         sys.stderr.write("agent-receipt: no session transcript found for this project.\n")
         return

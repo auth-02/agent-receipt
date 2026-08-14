@@ -6,10 +6,14 @@ Generate the Agent Receipt for the current session by running the plugin's
 on-demand script, then show me the result and where it was saved.
 
 Run this exactly (it finds this session's transcript, prints the receipt to the
-terminal, and saves the HTML/TXT copy):
+terminal, and saves the HTML/TXT copy). Passing the session id Claude Code
+exports pins the receipt to *this* session even when the command is run from a
+subdirectory of the session root — without it the script falls back to a
+working-directory guess that can mis-target a sibling session:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/receipt_now.py"
+AGENT_RECEIPT_SESSION_ID="$CLAUDE_CODE_SESSION_ID" \
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/receipt_now.py"
 ```
 
 Optional flags the user may have mentioned — set them on that command if asked:
