@@ -39,6 +39,20 @@ def read_state(session_id):
         return {}
 
 
+def write_state(session_id, updates):
+    """Merge `updates` into the session's state file, preserving existing keys
+    (start_time, start_head, cwd). Used to persist the Claude-authored task
+    summary from an on-demand /agent-receipt run so the automatic SessionEnd
+    receipt can reuse it. Best-effort; never raises."""
+    try:
+        state = read_state(session_id)
+        state.update(updates)
+        with open(state_path(session_id), "w") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+
 def read_hook_input():
     try:
         data = sys.stdin.read()
@@ -378,7 +392,18 @@ def build_context(hook):
     digits = int(hashlib.md5(session_id.encode()).hexdigest(), 16) % 10000
     receipt_no = f"AR-{local_end:%y%m}-{digits:04d}"
 
-    task = stats["title"] or _derive_title(stats["first_user"]) or "—"
+    # Task line precedence, most-authoritative first:
+    #   1. AGENT_RECEIPT_TASK — a natural-language summary Claude writes for the
+    #      current session (the /agent-receipt command sets this); persisted to
+    #      state so the automatic SessionEnd receipt reuses the same summary.
+    #   2. state["task"] — that saved summary, on the hook path (no env var).
+    #   3. ai-title — Claude Code's own generated title.
+    #   4. first genuine user prompt (slash-command turns skipped).
+    env_task = (os.environ.get("AGENT_RECEIPT_TASK") or "").strip()
+    if env_task:
+        write_state(session_id, {"task": env_task})
+    task = (env_task or (state.get("task") or "").strip()
+            or stats["title"] or _derive_title(stats["first_user"]) or "—")
     task = re.sub(r"\s+", " ", task).strip()
     if len(task) > 240:
         task = task[:237].rstrip() + "…"
