@@ -10,6 +10,5 @@
       "source": "./",
       "description": "Interactive on-screen thermal receipt for a Claude Code session."
     }
-  ],
-  "version": null
+  ]
 }
