@@ -3,7 +3,7 @@ description: Print an Agent Receipt for the current Claude Code session
 ---
 
 Generate the Agent Receipt for the current session by running the plugin's
-on-demand script, then show me the result and where it was saved.
+on-demand script. The script presents the interactive HTML receipt and saves it.
 
 First, write a **task summary**: one or two short sentences, in plain natural
 language, describing what *this* session has actually been about — the real
@@ -24,10 +24,10 @@ AGENT_RECEIPT_SESSION_ID="$CLAUDE_CODE_SESSION_ID" \
   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/receipt_now.py"
 ```
 
-Optional flags the user may have mentioned — set them on that command if asked:
-`AGENT_RECEIPT_SHOW_FILES=1` (include Files changed), `AGENT_RECEIPT_SHOW_TOOLS=1`
-(include Tools used), `AGENT_RECEIPT_PRINT_SPEED=Slow|Normal|Instant`,
-`AGENT_RECEIPT_CLEAR=1` (clear the screen first).
+Configuration is read from `~/.claude/agent-receipt/config.json`. For one-off
+experiments, environment overrides such as `AGENT_RECEIPT_SHOW_FILES=1`,
+`AGENT_RECEIPT_SHOW_TOOLS=1`, `AGENT_RECEIPT_PRINT_SPEED=Slow|Normal|Instant`,
+and `AGENT_RECEIPT_VIEWER=browser` may be used.
 
 After it runs, tell me the saved path and mention I can open the `.html` in a
 browser for the animated version.

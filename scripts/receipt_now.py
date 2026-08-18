@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""On-demand receipt for the current session — the engine behind /agent-receipt."""
+"""On-demand receipt for the current Claude Code session."""
 
 import os
 import sys
 import glob
 import json
-import shutil
+import subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _receipt as R
@@ -24,14 +24,6 @@ def _first_line_cwd(path):
 
 
 def find_by_session_id():
-    """Authoritative: locate THIS session's transcript by its id.
-
-    Claude Code exports the current session id on every command it runs
-    (CLAUDE_CODE_SESSION_ID); AGENT_RECEIPT_SESSION_ID lets a caller override.
-    This is independent of the working directory, so it never mis-targets a
-    sibling session the way the cwd heuristic can when the receipt is run from
-    a subdirectory of the session root.
-    """
     sid = os.environ.get("AGENT_RECEIPT_SESSION_ID") or os.environ.get("CLAUDE_CODE_SESSION_ID")
     if not sid:
         return None
@@ -57,10 +49,23 @@ def find_transcript(cwd):
     return all_hits[0] if all_hits else None
 
 
+def _present(path):
+    presenter = os.path.join(os.path.dirname(os.path.abspath(__file__)), "present_receipt.py")
+    try:
+        return subprocess.run(
+            [sys.executable, presenter, path],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=20,
+        ).stdout.strip()
+    except Exception:
+        return "unavailable"
+
+
 def main():
     cwd = os.getcwd()
-    # Prefer the session id Claude Code exports (cwd-independent); fall back to
-    # the cwd heuristic only when it is absent.
     transcript = find_by_session_id() or find_transcript(cwd)
     if not transcript:
         sys.stderr.write("agent-receipt: no session transcript found for this project.\n")
@@ -74,35 +79,19 @@ def main():
         "ongoing": True,
     })
 
-    no_color = bool(os.environ.get("NO_COLOR") or os.environ.get("AGENT_RECEIPT_NO_COLOR"))
-
-    printed_tty = False
-    if R.ANIMATE:
-        try:
-            tty = open("/dev/tty", "w")
-            R.animate_ansi(ctx, tty, color=not no_color, clear=R.CLEAR_SCREEN)
-            tty.flush()
-            tty.close()
-            printed_tty = True
-        except Exception:
-            printed_tty = False
-    if not printed_tty:
-        color = (not no_color) and sys.stdout.isatty()
-        sys.stdout.write("\n".join(R.build_ansi(ctx, color)) + "\n")
-
     out_dir = R.receipt_out_dir()
     base = os.path.join(out_dir, "agent-receipt-" + ctx["receipt_no"])
+    html_path = base + ".html"
     try:
-        with open(base + ".html", "w") as f:
+        with open(html_path, "w") as f:
             f.write(R.render_html(ctx))
-        with open(base + ".txt", "w") as f:
-            f.write(R.render_text(ctx))
-        for src in (R.css_asset_path(), R.js_asset_path()):
-            if os.path.exists(src):
-                shutil.copyfile(src, os.path.join(out_dir, os.path.basename(src)))
-        sys.stdout.write(f"\nSaved: {base}.html\n")
     except Exception as e:
-        sys.stderr.write(f"agent-receipt: could not save files: {e}\n")
+        sys.stderr.write(f"agent-receipt: could not save receipt: {e}\n")
+        return
+
+    method = _present(html_path)
+    if method == "unavailable":
+        sys.stderr.write(f"Agent Receipt: receipt unavailable. Saved at {html_path}\n")
 
 
 if __name__ == "__main__":

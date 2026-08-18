@@ -10,14 +10,83 @@ import hashlib
 import subprocess
 from datetime import datetime, timezone
 
+from providers import get_provider
+
 # ── Configuration ──────────────────────────────────────────────────────────
-SHOW_FILES = False       # include the "Files changed" section (needs git)
-SHOW_TOOLS = False       # include the "Tools used" section
-SHOW_TIMES = False       # include Started / Ended rows (Duration always shows)
-PRINT_SPEED = "Slow"     # animation speed: "Slow" | "Normal" | "Instant"
-ANIMATE = True           # feed the terminal receipt out line by line
-CLEAR_SCREEN = False     # clear the screen before printing the terminal receipt
-# ─────────────────────────────────────────────────────────────────────────────
+CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".claude", "agent-receipt", "config.json")
+_DEFAULT_CONFIG = {
+    "receipt": {
+        "show_files": True,
+        "show_tools": True,
+        "show_session": True,
+        "show_tokens": True,
+        "show_cost": True,
+        "show_barcode": True,
+        "show_git": True,
+        "show_tests": False,
+        "show_file_list": False,
+        "show_printed": True,
+        "print_speed": "Slow",
+        "bend": 5,
+        "leader": 60,
+    },
+    "viewer": {"mode": "native", "open_on_end": True},
+}
+
+def _load_config():
+    cfg = json.loads(json.dumps(_DEFAULT_CONFIG))
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            user = json.load(f)
+        for section in ("receipt", "viewer"):
+            if isinstance(user.get(section), dict):
+                cfg[section].update(user[section])
+    except Exception:
+        pass
+    env_bool = {
+        "AGENT_RECEIPT_SHOW_FILES": ("receipt", "show_files"),
+        "AGENT_RECEIPT_SHOW_TOOLS": ("receipt", "show_tools"),
+        "AGENT_RECEIPT_SHOW_SESSION": ("receipt", "show_session"),
+        "AGENT_RECEIPT_SHOW_TOKENS": ("receipt", "show_tokens"),
+        "AGENT_RECEIPT_SHOW_COST": ("receipt", "show_cost"),
+        "AGENT_RECEIPT_SHOW_BARCODE": ("receipt", "show_barcode"),
+        "AGENT_RECEIPT_SHOW_GIT": ("receipt", "show_git"),
+        "AGENT_RECEIPT_SHOW_TESTS": ("receipt", "show_tests"),
+        "AGENT_RECEIPT_SHOW_FILE_LIST": ("receipt", "show_file_list"),
+        "AGENT_RECEIPT_SHOW_PRINTED": ("receipt", "show_printed"),
+        "AGENT_RECEIPT_OPEN_ON_END": ("viewer", "open_on_end"),
+    }
+    for env, (section, key) in env_bool.items():
+        if env in os.environ:
+            cfg[section][key] = os.environ[env].strip().lower() not in ("0", "false", "no", "off", "")
+    if os.environ.get("AGENT_RECEIPT_PRINT_SPEED"):
+        cfg["receipt"]["print_speed"] = os.environ["AGENT_RECEIPT_PRINT_SPEED"]
+    if os.environ.get("AGENT_RECEIPT_VIEWER"):
+        cfg["viewer"]["mode"] = os.environ["AGENT_RECEIPT_VIEWER"]
+    for env, key in (("AGENT_RECEIPT_BEND", "bend"), ("AGENT_RECEIPT_LEADER", "leader")):
+        if os.environ.get(env):
+            try:
+                cfg["receipt"][key] = float(os.environ[env])
+            except ValueError:
+                pass
+    return cfg
+
+CONFIG = _load_config()
+SHOW_FILES = bool(CONFIG["receipt"]["show_files"])
+SHOW_TOOLS = bool(CONFIG["receipt"]["show_tools"])
+SHOW_SESSION = bool(CONFIG["receipt"]["show_session"])
+SHOW_TOKENS = bool(CONFIG["receipt"]["show_tokens"])
+SHOW_COST = bool(CONFIG["receipt"]["show_cost"])
+SHOW_BARCODE = bool(CONFIG["receipt"]["show_barcode"])
+SHOW_GIT = bool(CONFIG["receipt"]["show_git"])
+SHOW_TESTS = bool(CONFIG["receipt"]["show_tests"])
+SHOW_FILE_LIST = bool(CONFIG["receipt"]["show_file_list"])
+SHOW_PRINTED = bool(CONFIG["receipt"]["show_printed"])
+PRINT_SPEED = str(CONFIG["receipt"]["print_speed"])
+BEND = float(CONFIG["receipt"]["bend"])
+LEADER = float(CONFIG["receipt"]["leader"])
+VIEWER_MODE = str(CONFIG["viewer"]["mode"])
+OPEN_ON_END = bool(CONFIG["viewer"]["open_on_end"])
 
 STATE_DIR = os.path.join(os.path.expanduser("~"), ".claude", "agent-receipt", "state")
 
@@ -69,9 +138,11 @@ def receipt_out_dir():
     return d
 
 
+GIT_TIMEOUT = float(os.environ.get("AGENT_RECEIPT_GIT_TIMEOUT", "0.75"))
+
 def git(args, cwd):
     try:
-        r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=10)
+        r = subprocess.run(["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=GIT_TIMEOUT)
         if r.returncode == 0:
             return r.stdout.strip()
     except Exception:
@@ -110,49 +181,17 @@ def git_changes(cwd, start_head):
     return files
 
 
-PRICING = {
-    "fable-5":    {"in": 10.0, "out": 50.0, "cw": 12.50, "cr": 1.00},
-    "mythos-5":   {"in": 10.0, "out": 50.0, "cw": 12.50, "cr": 1.00},
-    "opus-5":     {"in": 5.0,  "out": 25.0, "cw": 6.25,  "cr": 0.50},
-    "sonnet-5":   {"in": 2.0,  "out": 10.0, "cw": 2.50,  "cr": 0.20},
-    "haiku-4.5":  {"in": 1.0,  "out": 5.0,  "cw": 1.25,  "cr": 0.10},
-    "opus-4.8":   {"in": 5.0,  "out": 25.0, "cw": 6.25,  "cr": 0.50},
-    "opus-4.7":   {"in": 5.0,  "out": 25.0, "cw": 6.25,  "cr": 0.50},
-    "opus-4.6":   {"in": 5.0,  "out": 25.0, "cw": 6.25,  "cr": 0.50},
-    "opus-4.5":   {"in": 5.0,  "out": 25.0, "cw": 6.25,  "cr": 0.50},
-    "sonnet-4.6": {"in": 3.0,  "out": 15.0, "cw": 3.75,  "cr": 0.30},
-    "sonnet-4.5": {"in": 3.0,  "out": 15.0, "cw": 3.75,  "cr": 0.30},
-    "opus-4.1":   {"in": 15.0, "out": 75.0, "cw": 18.75, "cr": 1.50},
-    "opus-4":     {"in": 15.0, "out": 75.0, "cw": 18.75, "cr": 1.50},
-    "sonnet-4":   {"in": 3.0,  "out": 15.0, "cw": 3.75,  "cr": 0.30},
-    "haiku-3.5":  {"in": 0.80, "out": 4.0,  "cw": 1.00,  "cr": 0.08},
-}
-
-_FAMILY_FALLBACK = {
-    "opus": "opus-5", "sonnet": "sonnet-5", "haiku": "haiku-4.5",
-    "fable": "fable-5", "mythos": "mythos-5",
-}
-_FAMILIES = ("opus", "sonnet", "haiku", "fable", "mythos")
-
-
-def normalize_model(model):
-    parts = [p for p in (model or "").lower().replace("claude-", "").split("-") if p]
-    if not parts:
-        return "", ""
-    family = next((p for p in parts if p in _FAMILIES), "")
-    ver = [p for p in parts if p.isdigit() and len(p) <= 2]
-    if not family:
-        return "-".join(parts), ""
-    return family + ("-" + ".".join(ver) if ver else ""), family
-
-
-def price_for(model):
-    key, family = normalize_model(model)
-    if key in PRICING:
-        return PRICING[key]
-    if family in _FAMILY_FALLBACK:
-        return PRICING[_FAMILY_FALLBACK[family]]
-    return PRICING["sonnet-5"]
+def git_summary(cwd, start_head):
+    """Return (branch, commits_this_session) for the repo, or (None, None)."""
+    branch = git(["rev-parse", "--abbrev-ref", "HEAD"], cwd)
+    if branch == "HEAD":  # detached
+        branch = git(["rev-parse", "--short", "HEAD"], cwd)
+    commits = None
+    if start_head:
+        out = git(["rev-list", "--count", start_head + "..HEAD"], cwd)
+        if out is not None and out.isdigit():
+            commits = int(out)
+    return branch, commits
 
 
 def parse_ts(s):
@@ -162,131 +201,6 @@ def parse_ts(s):
         return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
     except Exception:
         return None
-
-
-def _user_text(content):
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        for b in content:
-            if isinstance(b, dict):
-                if b.get("type") == "tool_result":
-                    return None
-                if b.get("type") == "text" and b.get("text"):
-                    return b["text"].strip()
-    return None
-
-
-# Wrapper tags Claude Code injects around slash-commands and local command
-# output. When a user turn is one of these it's boilerplate, not a real prompt.
-_WRAP_TAGS = (
-    "local-command-caveat", "command-name", "command-message", "command-args",
-    "command-contents", "local-command-stdout", "system-reminder",
-)
-_WRAP_RE = re.compile(r"<(" + "|".join(_WRAP_TAGS) + r")\b[^>]*>.*?</\1>", re.S | re.I)
-
-
-# A Claude Code slash-command token at the very start of a turn: /name or
-# /plugin:name, optionally followed by args/output. Command names are
-# lowercase, which keeps this from matching an absolute path like /Users/... .
-_SLASH_CMD_RE = re.compile(r"^/[a-z][a-z0-9-]*(?::[a-z0-9-]+)?(?:\s|$)")
-
-
-def _clean_prompt(text):
-    """Strip Claude Code caveat/command wrappers and return the human-typed
-    remainder — or '' if the turn was pure boilerplate or a slash-command.
-
-    A turn that *begins* with a slash-command token is a command invocation or
-    its pasted output (e.g. an /agent-receipt dump), not a human-authored
-    prompt — the whole turn is discarded so the task line falls through to the
-    first genuine prompt instead of echoing command/tool chatter."""
-    if not text:
-        return ""
-    t = _WRAP_RE.sub("", text)                       # drop wrapper tag blocks
-    t = re.sub(r"</?[a-z-]+>", "", t, flags=re.I)     # drop stray lone tags
-    t = re.sub(r"Caveat:.*", "", t, flags=re.S | re.I)  # drop caveat sentences
-    t = re.sub(r"\s+", " ", t).strip()
-    if not t:
-        return ""
-    if _SLASH_CMD_RE.match(t):                        # a slash-command turn
-        return ""
-    return t
-
-
-def _derive_title(text):
-    """Synthesize a concise, headline-style task from the user's own prompt when
-    Claude Code hasn't generated an ai-title yet — first sentence, capped."""
-    if not text:
-        return None
-    head = re.split(r"(?<=[.!?])\s|\n", text, 1)[0].strip() or text
-    head = re.sub(r"\s+", " ", head)
-    if len(head) > 72:
-        head = head[:69].rstrip() + "…"
-    return head[:1].upper() + head[1:] if head else None
-
-
-def parse_transcript(path):
-    stats = {
-        "model": None, "version": None, "title": None,
-        "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
-        "tools": {}, "first_user": None,
-        "start": None, "end": None, "turns": 0,
-    }
-    if not path or not os.path.exists(path):
-        return stats
-    seen_msg_ids = set()
-    with open(path, "r", errors="replace") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                e = json.loads(line)
-            except Exception:
-                continue
-
-            t = parse_ts(e.get("timestamp"))
-            if t:
-                if stats["start"] is None or t < stats["start"]:
-                    stats["start"] = t
-                if stats["end"] is None or t > stats["end"]:
-                    stats["end"] = t
-            if e.get("version") and not stats["version"]:
-                stats["version"] = e["version"]
-
-            typ = e.get("type")
-            if typ == "ai-title" and e.get("aiTitle"):
-                stats["title"] = e["aiTitle"]
-                continue
-
-            msg = e.get("message") or {}
-            if typ == "assistant":
-                mid = msg.get("id")
-                if mid and mid in seen_msg_ids:
-                    continue
-                if mid:
-                    seen_msg_ids.add(mid)
-                model = msg.get("model")
-                if model and model != "<synthetic>":
-                    stats["model"] = model
-                stats["turns"] += 1
-                u = msg.get("usage") or {}
-                stats["input"] += u.get("input_tokens", 0) or 0
-                stats["output"] += u.get("output_tokens", 0) or 0
-                stats["cache_read"] += u.get("cache_read_input_tokens", 0) or 0
-                stats["cache_write"] += u.get("cache_creation_input_tokens", 0) or 0
-                content = msg.get("content")
-                if isinstance(content, list):
-                    for b in content:
-                        if isinstance(b, dict) and b.get("type") == "tool_use":
-                            name = b.get("name", "?")
-                            stats["tools"][name] = stats["tools"].get(name, 0) + 1
-            elif typ == "user":
-                if stats["first_user"] is None:
-                    txt = _clean_prompt(_user_text(msg.get("content")))
-                    if txt:
-                        stats["first_user"] = txt
-    return stats
 
 
 def fmt_int(n):
@@ -357,9 +271,10 @@ def build_context(hook):
     session_id = hook.get("session_id") or "unknown"
     transcript = hook.get("transcript_path")
     cwd = hook.get("cwd") or os.getcwd()
+    provider = get_provider(hook.get("provider") or os.environ.get("AGENT_RECEIPT_PROVIDER") or "claude_code")
 
     state = read_state(session_id)
-    stats = parse_transcript(transcript)
+    stats = provider.parse_transcript(transcript)
 
     start = parse_ts(state.get("start_time")) or stats["start"]
     end = stats["end"] or datetime.now(timezone.utc)
@@ -367,27 +282,40 @@ def build_context(hook):
         start = start.replace(tzinfo=timezone.utc)
     duration = (end - start).total_seconds() if start else 0
 
+    in_repo = is_git_repo(cwd)
     files = []
-    if SHOW_FILES and is_git_repo(cwd):
+    if SHOW_FILES and in_repo:
         files = git_changes(cwd, state.get("start_head"))
     files_plus = sum(f[1] for f in files)
     files_minus = sum(f[2] for f in files)
 
-    p = price_for(stats["model"])
+    git_branch, git_commits = (None, None)
+    if SHOW_GIT and in_repo:
+        git_branch, git_commits = git_summary(cwd, state.get("start_head"))
+
+    tools_sorted = sorted(stats["tools"].items(), key=lambda kv: kv[1], reverse=True)
+    top_tool = tools_sorted[0][0] if tools_sorted else None
+
+    p = provider.price_for(stats["model"])
+    cost_available = p is not None
+    # Total tokens is the sum of every row shown in the Usage section — input,
+    # output, and cache read/write — so the displayed rows add up to the total.
     total_tokens = stats["input"] + stats["output"] + stats["cache_read"] + stats["cache_write"]
-    actual = (
-        cost(stats["output"], p["out"])
-        + cost(stats["input"], p["in"])
-        + cost(stats["cache_write"], p["cw"])
-        + cost(stats["cache_read"], p["cr"])
-    )
-    subtotal = cost(stats["output"], p["out"]) + cost(
-        stats["input"] + stats["cache_write"] + stats["cache_read"], p["in"]
-    )
-    discount = subtotal - actual
+    if cost_available:
+        actual = (
+            cost(stats["output"], p["out"])
+            + cost(stats["input"], p["in"])
+            + cost(stats["cache_write"], p["cw"])
+            + cost(stats["cache_read"], p["cr"])
+        )
+        subtotal = cost(stats["output"], p["out"]) + cost(
+            stats["input"] + stats["cache_write"] + stats["cache_read"], p["in"]
+        )
+        discount = subtotal - actual
+    else:
+        actual = subtotal = discount = 0.0
 
     local_end = end.astimezone()
-    local_start = start.astimezone() if start else local_end
 
     digits = int(hashlib.md5(session_id.encode()).hexdigest(), 16) % 10000
     receipt_no = f"AR-{local_end:%y%m}-{digits:04d}"
@@ -403,40 +331,58 @@ def build_context(hook):
     if env_task:
         write_state(session_id, {"task": env_task})
     task = (env_task or (state.get("task") or "").strip()
-            or stats["title"] or _derive_title(stats["first_user"]) or "—")
+            or stats["title"] or provider.derive_title(stats["first_user"]) or "—")
     task = re.sub(r"\s+", " ", task).strip()
     if len(task) > 240:
         task = task[:237].rstrip() + "…"
 
     session_name = state.get("session_name")
     resume_target = session_name or session_id
-    resume_cmd = "claude --resume " + resume_target
+    resume_cmd = provider.resume_command(resume_target)
     ongoing = bool(hook.get("ongoing"))
     reason = hook.get("reason") or ("in progress" if ongoing else "session ended")
+    stamp = "Ongoing" if ongoing else provider.status_for_end(reason)
 
     return {
         "ongoing": ongoing,
-        "stamp": "Ongoing" if ongoing else "Shipped",
+        "stamp": stamp,
+        "end_reason": reason,
         "receipt_no": receipt_no,
         "date_str": f"{local_end:%d %b %Y} · {local_end:%H:%M}",
         "workspace": collapse_home(cwd),
         "session_id": session_id,
         "session_name": session_name,
         "reason": reason,
-        "agent": "Claude Code" + (f" {stats['version']}" if stats["version"] else ""),
+        "provider": provider.id,
+        "provider_brand": provider.brand_line(),
+        "agent": provider.display_name(stats),
         "model": stats["model"] or "unknown",
-        "show_times": SHOW_TIMES,
-        "started": f"{local_start:%H:%M:%S}",
-        "ended": f"{local_end:%H:%M:%S}",
+        "show_session": SHOW_SESSION,
+        "show_tokens": SHOW_TOKENS,
+        "show_cost": SHOW_COST,
+        "show_barcode": SHOW_BARCODE,
+        "pricing": p,
+        "cost_available": cost_available,
+        "viewer_mode": VIEWER_MODE,
+        "open_on_end": OPEN_ON_END,
+        "bend": BEND,
+        "leader": LEADER,
         "duration": fmt_dur(duration),
         "printed": f"{local_end:%H:%M:%S}",
+        "show_printed": SHOW_PRINTED,
         "task": task,
         "show_files": SHOW_FILES,
+        "show_file_list": SHOW_FILE_LIST,
         "files": files,
         "files_plus": files_plus,
         "files_minus": files_minus,
         "show_tools": SHOW_TOOLS,
-        "tools": sorted(stats["tools"].items(), key=lambda kv: kv[1], reverse=True),
+        "tools": tools_sorted,
+        "top_tool": top_tool,
+        "show_git": SHOW_GIT,
+        "git_branch": git_branch,
+        "git_commits": git_commits,
+        "show_tests": SHOW_TESTS,
         "tok_in": stats["input"],
         "tok_out": stats["output"],
         "tok_cr": stats["cache_read"],
@@ -448,203 +394,6 @@ def build_context(hook):
         "resume_cmd": resume_cmd,
         "resume_target": resume_target,
     }
-
-
-W = 42
-
-
-def _ansi_enabled():
-    if os.environ.get("NO_COLOR") or os.environ.get("AGENT_RECEIPT_NO_COLOR"):
-        return False
-    return sys.stderr.isatty()
-
-
-def build_ansi(ctx, color):
-
-    def c(code, s):
-        return f"\033[{code}m{s}\033[0m" if color else s
-
-    DIM, BOLD, CYAN, MAG = "2", "1", "36", "35"
-    lines = []
-
-    def center(s):
-        s = s[:W]
-        return " " * ((W - len(s)) // 2) + s
-
-    def rule(ch="┄"):
-        return c(DIM, ch * W)
-
-    def kv(label, value):
-        value = str(value)
-        space = W - len(label) - len(value)
-        if space < 1:
-            value = value[: max(0, W - len(label) - 2)] + "…"
-            space = W - len(label) - len(value)
-        return f"{label}{c(DIM, '·' * max(1, space))}{value}"
-
-    lines.append(c(DIM, ("╱" * (W // 2))[:W]))
-    lines.append("")
-    lines.append(c(BOLD, center("AGENT RECEIPT")))
-    lines.append(c(DIM, center("SESSION SUMMARY")))
-    lines.append(c(DIM, center("anthropic.com / claude / code")))
-    lines.append("")
-    lines.append(rule())
-    lines.append(kv("Receipt no.", ctx["receipt_no"]))
-    lines.append(kv("Date", ctx["date_str"]))
-    lines.append(kv("Workspace", ctx["workspace"]))
-    lines.append(rule())
-    lines.append("")
-    lines.append(c(DIM, "AGENT"))
-    lines.append(kv("Agent", ctx["agent"]))
-    lines.append(kv("Model", ctx["model"]))
-    if ctx.get("show_times"):
-        lines.append(kv("Started", ctx["started"]))
-        lines.append(kv("Ended", ctx["ended"]))
-    lines.append(kv("Duration", ctx["duration"]))
-    lines.append("")
-    lines.append(c(DIM, "TASK"))
-    for wl in _wrap(ctx["task"], W):
-        lines.append(c("3", wl) if color else wl)
-
-    if ctx.get("show_files"):
-        lines.append("")
-        lines.append(c(DIM, "FILES CHANGED"))
-        if ctx["files"]:
-            for path, add, dele in ctx["files"][:12]:
-                churn = f"+{add} -{dele}"
-                name = _elide(path, W - len(churn) - 1)
-                space = W - len(name) - len(churn)
-                lines.append(name + " " * max(1, space) + c(DIM, churn))
-            if len(ctx["files"]) > 12:
-                lines.append(c(DIM, f"  … +{len(ctx['files']) - 12} more"))
-            lines.append(kv(f"{len(ctx['files'])} files",
-                            f"+{ctx['files_plus']} -{ctx['files_minus']}"))
-        else:
-            lines.append(c(DIM, "  (no tracked changes)"))
-
-    if ctx.get("show_tools") and ctx["tools"]:
-        lines.append("")
-        lines.append(c(DIM, "TOOLS USED"))
-        row = ""
-        for name, n in ctx["tools"]:
-            cell = f"{name} ×{n}"
-            piece = ("   " + cell) if row else cell
-            if len(row) + len(piece) > W:
-                lines.append(row)
-                row = cell
-            else:
-                row += piece
-        if row:
-            lines.append(row)
-
-    lines.append("")
-    lines.append(c(DIM, "TOKENS"))
-    lines.append(kv("Input", fmt_int(ctx["tok_in"])))
-    lines.append(kv("Output", fmt_int(ctx["tok_out"])))
-    lines.append(kv("Cache read", fmt_int(ctx["tok_cr"])))
-    lines.append(kv("Cache write", fmt_int(ctx["tok_cw"])))
-    lines.append(kv("Total tokens", fmt_int(ctx["tok_total"])))
-    lines.append(rule())
-    lines.append(kv("Subtotal", fmt_money(ctx["subtotal"])))
-    lines.append(kv("Cache discount", fmt_money(-ctx["discount"])))
-    lines.append(c(BOLD, kv("IF BILLED PAY-AS-YOU-GO", fmt_money(ctx["total"]))))
-    lines.append(c(DIM, center("Estimated API cost · USD")))
-    lines.append(c(DIM, center("not charged to your plan")))
-    lines.append("")
-    lines.append(c(MAG, center(f"[ {ctx['stamp'].upper()} ]")))
-    lines.append("")
-    lines.append(c(DIM, center("scan or run to resume:")))
-    lines.append(c(CYAN, center(ctx["resume_cmd"])))
-    lines.append("")
-    lines.append(c(DIM, center("thank you for shipping")))
-    lines.append(c(DIM, center("no refunds on merged commits")))
-    lines.append("")
-    lines.append(c(DIM, ("╲" * (W // 2))[:W]))
-    return lines
-
-
-def render_ansi(ctx):
-    return "\n".join(build_ansi(ctx, _ansi_enabled()))
-
-
-def print_speed_factor():
-    return {"slow": 2.4, "normal": 1.0, "instant": 0.0}.get(PRINT_SPEED.lower(), 2.4)
-
-
-def animate_ansi(ctx, stream, color=True, clear=False):
-    import time
-    per_line = 0.045 * print_speed_factor()
-    ctrl = "\033[r"
-    if clear:
-        ctrl += "\033[2J\033[3J\033[H"
-    try:
-        stream.write(ctrl)
-        stream.write("\n")
-        stream.flush()
-    except Exception:
-        pass
-    for ln in build_ansi(ctx, color):
-        stream.write(ln + "\n")
-        stream.flush()
-        d = per_line * (7 if ("SHIPPED" in ln or "ONGOING" in ln) else 1)
-        if d:
-            time.sleep(d)
-
-
-def _wrap(text, width):
-    words, line, out = text.split(), "", []
-    for w in words:
-        if len(line) + len(w) + (1 if line else 0) > width:
-            if line:
-                out.append(line)
-            line = w
-        else:
-            line = (line + " " + w) if line else w
-    if line:
-        out.append(line)
-    return out or [""]
-
-
-def _elide(path, maxlen):
-    if len(path) <= maxlen:
-        return path
-    return "…" + path[-(maxlen - 1):]
-
-
-def render_text(ctx):
-    dur = ctx["duration"]
-    if ctx.get("show_times"):
-        dur = f"{ctx['duration']} ({ctx['started']} → {ctx['ended']})"
-    rows = [
-        "AGENT RECEIPT — SESSION SUMMARY",
-        f"Receipt no. {ctx['receipt_no']} · {ctx['date_str']} · {ctx['workspace']}",
-        f"Session      {ctx['resume_target']}",
-        "",
-        f"Agent        {ctx['agent']}",
-        f"Model        {ctx['model']}",
-        f"Duration     {dur}",
-        "",
-        f"Task         {ctx['task']}",
-        "",
-    ]
-    if ctx.get("show_files"):
-        rows.append(f"Files        {len(ctx['files'])} files, "
-                    f"+{ctx['files_plus']} -{ctx['files_minus']}")
-    if ctx.get("show_tools"):
-        tools = " · ".join(f"{n} {c}" for n, c in ctx["tools"]) or "—"
-        rows.append(f"Tools        {tools}")
-    rows += [
-        f"Tokens       {fmt_int(ctx['tok_total'])} total "
-        f"(in {fmt_int(ctx['tok_in'])} / out {fmt_int(ctx['tok_out'])})",
-        f"API cost     {fmt_money(ctx['total'])} if billed pay-as-you-go (est.)",
-        "             not charged to your plan — flat fee covers it",
-        "",
-        ("STATUS: ONGOING — session in progress." if ctx.get("ongoing")
-         else "STATUS: SHIPPED — thank you for shipping."),
-        "",
-        f"Resume: {ctx['resume_cmd']}",
-    ]
-    return "\n".join(rows)
 
 
 CSS_FILENAME = "receipt.css"
@@ -665,12 +414,26 @@ def js_asset_path():
     return _asset_path(JS_FILENAME)
 
 
-_HTML_HEAD = (
-    '<meta charset="utf-8">\n'
-    '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-    "<title>Agent Receipt</title>\n"
-    '<link rel="stylesheet" href="' + CSS_FILENAME + '">'
-)
+def _html_head():
+    try:
+        with open(css_asset_path(), "r", encoding="utf-8") as f:
+            css = f.read()
+    except Exception:
+        css = ""
+    return (
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        "<title>Agent Receipt</title>\n"
+        '<style>\n' + css + '\n</style>'
+    )
+
+
+def _html_script():
+    try:
+        with open(js_asset_path(), "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return ""
 
 
 def _h_rows(rows):
@@ -685,94 +448,218 @@ def _h_rows(rows):
     return "\n".join(out)
 
 
+def _svg_icon(kind):
+    icons = {
+        "duration": '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+        "usage": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v4H7zM5 8h14v11H5z"/><path d="M8 12h8M8 15h5"/></svg>',
+        "compute": '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/><path d="M9 9h6v6H9z"/></svg>',
+        "changes": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 4l-4 16"/></svg>',
+        "tools": '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0-5.2 5.2L4 17a2.1 2.1 0 1 0 3 3l5.3-5.3a4 4 0 0 0 5.2-5.2l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>',
+        "tests": '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
+        "git": '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><circle cx="17" cy="9" r="2.4"/><path d="M6 8.4v7.2M17 11.4a5 5 0 0 1-5 5H8.4"/></svg>',
+    }
+    return icons.get(kind, "")
+
+
+def _section_heading(label, kind=None):
+    icon = _svg_icon(kind) if kind else ""
+    return f'<div class="section-heading">{icon}<span>{html.escape(label)}</span></div>'
+
+
 def render_html(ctx):
     speed = PRINT_SPEED.lower()
     speed_class = {"slow": " speed-slow", "normal": "", "instant": " speed-instant"}.get(
         speed, " speed-slow"
     )
 
-    files_section = ""
-    if ctx.get("show_files"):
-        if ctx["files"]:
-            rows = "".join(
-                f'<div class="file"><span class="name">{html.escape(path)}</span>'
-                f'<span class="churn">+{add} −{dele}</span></div>\n'
-                for path, add, dele in ctx["files"][:14]
-            )
-        else:
-            rows = '<div class="note">no tracked changes</div>'
-        files_section = (
-            '<div class="sec">Files changed</div>\n' + rows
-            + '<div class="row sumrow"><span>' + str(len(ctx["files"]))
-            + ' files</span><span class="grow"></span><span class="num">+'
-            + str(ctx["files_plus"]) + ' −' + str(ctx["files_minus"]) + '</span></div>'
-        )
-
-    tools_section = ""
-    if ctx.get("show_tools"):
-        cells = "".join(
-            f'<div><span>{html.escape(name)}</span><span class="num">× {n}</span></div>\n'
-            for name, n in ctx["tools"]
-        ) or "<div><span>—</span></div>"
-        tools_section = '<div class="sec">Tools used</div>\n<div class="tools">' + cells + "</div>"
-
-    agent_rows = [("Agent", ctx["agent"], False), ("Model", ctx["model"], False)]
-    if ctx.get("show_times"):
-        agent_rows += [("Started", ctx["started"], True), ("Ended", ctx["ended"], True)]
-    agent_rows.append(("Duration", ctx["duration"], True))
-
-    barcode = code128_gradient(ctx["resume_target"])
-
-    body = f"""<div class="wrap{speed_class}">
-  <div class="kicker"><span class="blip"></span><span>Claude Code — {html.escape(ctx['reason'])}</span></div>
-  <div class="paperwrap"><div class="paper">
-    <div class="printhead"></div>
-    <div class="title">Agent Receipt</div>
-    <div class="sub">Session Summary</div>
-    <div class="dom">anthropic.com / claude / code</div>
-    <div class="dash d1"></div>
-    {_h_rows([
+    meta_rows = [
         ("Receipt no.", ctx["receipt_no"], True),
         ("Date", ctx["date_str"], True),
         ("Workspace", ctx["workspace"], False),
-        ("Session", ctx["resume_target"], False),
-    ])}
-    <div class="dash d2"></div>
-    <div class="sec">Agent</div>
-    {_h_rows(agent_rows)}
-    <div class="sec">Task</div>
-    <p class="task">{html.escape(ctx['task'])}</p>
-    {files_section}
-    {tools_section}
-    <div class="sec">Tokens</div>
-    {_h_rows([
-        ("Input", fmt_int(ctx["tok_in"]), True),
-        ("Output", fmt_int(ctx["tok_out"]), True),
-        ("Cache read", fmt_int(ctx["tok_cr"]), True),
-        ("Cache write", fmt_int(ctx["tok_cw"]), True),
-    ])}
-    <div class="row sumrow">
-      <span>Total tokens</span><span class="grow"></span>
-      <span class="num">{fmt_int(ctx['tok_total'])}</span></div>
-    <div class="dash d3"></div>
-    {_h_rows([
-        ("Subtotal", fmt_money(ctx["subtotal"]), True),
-        ("Cache discount", fmt_money(-ctx["discount"]), True),
-    ])}
-    <div class="sec">If billed pay-as-you-go (API)</div>
-    <div class="total"><span class="lbl">Est. API cost</span><span class="grow"></span>
-      <span class="amt">{fmt_money(ctx['total'])}</span></div>
-    <div class="estimated">USD</div>
-    <div class="stamp-wrap"><div class="stamp">{ctx['stamp']}</div></div>
-    <div class="barcode" style="background-image:{barcode};"
-      title="{html.escape(ctx['resume_cmd'])}"></div>
-    <div class="cap">Scan or run <code>{html.escape(ctx['resume_cmd'])}</code> to resume</div>
-    <div class="thanks">Thank you for shipping</div>
-    <div class="cap">No refunds on merged commits.</div>
-    <div class="foot"><span class="chk">✓</span><span>Printed {html.escape(ctx['printed'])}</span></div>
-  </div></div>
-</div>"""
+        ("Agent", ctx["agent"], False),
+        ("Model", ctx["model"], False),
+    ]
 
-    return ("<!DOCTYPE html>\n<html>\n<head>\n" + _HTML_HEAD
+    files_tools = ""
+    show_changes = bool(ctx.get("show_files"))
+    show_tools = bool(ctx.get("show_tools"))
+    if show_changes or show_tools:
+        columns = []
+        if show_changes:
+            columns.append(
+                f'''<div class="activity-column">{_section_heading("Changes", "changes")}
+                <div class="activity-row"><span>Files changed</span><span class="num">{len(ctx["files"])}</span></div>
+                <div class="activity-row"><span>Insertions</span><span class="num positive">+{fmt_int(ctx["files_plus"])}</span></div>
+                <div class="activity-row"><span>Deletions</span><span class="num negative">−{fmt_int(ctx["files_minus"])}</span></div>
+                </div>'''
+            )
+        if show_tools:
+            top_tool_row = ""
+            if ctx.get("top_tool"):
+                top_tool_row = (
+                    f'<div class="activity-row"><span>Top tool</span>'
+                    f'<span class="num">{html.escape(ctx["top_tool"])}</span></div>'
+                )
+            columns.append(
+                f'''<div class="activity-column">{_section_heading("Tools used", "tools")}
+                <div class="activity-row"><span>Total tool calls</span><span class="num">{sum(n for _, n in ctx["tools"])}</span></div>
+                <div class="activity-row"><span>Unique tools</span><span class="num">{len(ctx["tools"])}</span></div>
+                {top_tool_row}
+                </div>'''
+            )
+        files_tools = '<div class="activity">' + "".join(columns) + "</div>"
+
+    # Optional detailed file list, under Changes/Tools.
+    file_list_html = ""
+    if ctx.get("show_files") and ctx.get("show_file_list") and ctx.get("files"):
+        rows = []
+        for path, add, dele in ctx["files"][:6]:
+            rows.append(
+                f'<div class="file-row"><span class="file-path">{html.escape(path)}</span>'
+                f'<span class="file-stat"><span class="positive">+{add}</span> '
+                f'<span class="negative">−{dele}</span></span></div>'
+            )
+        more = len(ctx["files"]) - 6
+        if more > 0:
+            rows.append(f'<div class="file-more">+ {more} more file{"s" if more != 1 else ""}</div>')
+        file_list_html = '<div class="file-list">' + "".join(rows) + "</div>"
+
+    # Optional Tests / Git columns.
+    tests_git_html = ""
+    show_git = bool(ctx.get("show_git") and ctx.get("git_branch"))
+    show_tests = bool(ctx.get("show_tests"))
+    if show_tests or show_git:
+        tg = []
+        if show_tests:
+            tg.append(
+                f'''<div class="activity-column">{_section_heading("Tests", "tests")}
+                <div class="activity-row"><span>Passed</span><span class="num">—</span></div>
+                <div class="activity-row"><span>Failed</span><span class="num">—</span></div>
+                </div>'''
+            )
+        if show_git:
+            commits = ctx.get("git_commits")
+            commits_row = ""
+            if commits is not None:
+                commits_row = f'<div class="activity-row"><span>Commits</span><span class="num">{commits}</span></div>'
+            tg.append(
+                f'''<div class="activity-column">{_section_heading("Git", "git")}
+                {commits_row}
+                <div class="activity-row"><span>Branch</span><span class="num">{html.escape(ctx["git_branch"])}</span></div>
+                </div>'''
+            )
+        tests_git_html = '<div class="dash"></div><div class="activity">' + "".join(tg) + "</div>"
+
+    printed_html = ""
+    if ctx.get("show_printed"):
+        printed_html = (
+            f'<div class="printed"><span class="printed-dot"></span>'
+            f'PRINTED {html.escape(ctx["printed"])}</div>'
+        )
+
+    token_section = ""
+    if ctx.get("show_tokens"):
+        token_section = f'''
+        <div class="dash"></div>
+        <section class="receipt-section usage-section">
+          {_section_heading("Usage", "usage")}
+          {_h_rows([
+              ("Input tokens", fmt_int(ctx["tok_in"]), True),
+              ("Output tokens", fmt_int(ctx["tok_out"]), True),
+              ("Cache read tokens", fmt_int(ctx["tok_cr"]), True),
+              ("Cache write tokens", fmt_int(ctx["tok_cw"]), True),
+          ])}
+          <div class="rule"></div>
+          <div class="row total-row"><span>Total tokens</span><span class="lead"></span><span class="num">{fmt_int(ctx["tok_total"])}</span></div>
+        </section>'''
+
+    cost_section = ""
+    if ctx.get("show_cost"):
+        if ctx.get("cost_available"):
+            cost_section = f'''
+        <div class="dash"></div>
+        <section class="receipt-section compute-section">
+          {_section_heading("Compute (If billed pay-as-you-go)", "compute")}
+          {_h_rows([
+              ("Input", fmt_money(cost(ctx["tok_in"], ctx["pricing"]["in"])), True),
+              ("Output", fmt_money(cost(ctx["tok_out"], ctx["pricing"]["out"])), True),
+              ("Cache discount", fmt_money(-ctx["discount"]), True),
+          ])}
+          <div class="rule"></div>
+          <div class="row total-row api-total"><span>Estimated API cost</span><span class="lead"></span><span class="num">{fmt_money(ctx["total"])}</span></div>
+          <div class="not-charged">Not charged to your plan</div>
+        </section>'''
+        else:
+            cost_section = f'''
+        <div class="dash"></div>
+        <section class="receipt-section compute-section">
+          {_section_heading("Compute (If billed pay-as-you-go)", "compute")}
+          <div class="not-charged">Pricing unavailable for model {html.escape(ctx["model"])}.</div>
+        </section>'''
+
+    barcode_html = ""
+    if ctx.get("show_barcode"):
+        barcode = code128_gradient(ctx["resume_target"])
+        barcode_html = f'''
+        <div class="barcode" style="background-image:{barcode};" title="{html.escape(ctx["resume_cmd"])}"></div>
+        <div class="resume-label">Resume with:</div>
+        <button class="resume-command" type="button" data-copy title="Click to copy">{html.escape(ctx["resume_cmd"])}</button>'''
+
+    style_vars = f"--cfg-bend:{ctx['bend']:g}deg;--cfg-leader:{ctx['leader']:g}px;"
+    body = f'''<div class="stage{speed_class}" style="{style_vars}" data-receipt-status="{html.escape(ctx['stamp'])}">
+  <button class="close" type="button" data-receipt-close aria-label="Close receipt">×</button>
+  <div class="printer" aria-hidden="true"><div class="printer-slot"></div></div>
+  <div class="paperwrap"><div class="paper-roll">
+    <div class="pull-zone pull-top" data-pull="top" title="Pull down to feed paper from the roll"></div>
+    <div class="pull-zone pull-bottom" data-pull="bottom" title="Pull to feed a blank tail"></div>
+    <div class="feed-strip" data-lead></div>
+    <div class="paper">
+    <div class="print-head" aria-hidden="true"></div>
+    <div class="paper-feed"></div>
+    <header class="receipt-header">
+      <div class="title">Agent Receipt</div>
+      <div class="sub">Session Summary</div>
+      <div class="dom">{html.escape(ctx["provider_brand"])}</div>
+    </header>
+    <div class="dash"></div>
+    <section class="meta">{_h_rows(meta_rows)}</section>
+    <div class="dash"></div>
+    <section class="receipt-section task-section">
+      {_section_heading("Task")}
+      <div class="task-body">{html.escape(ctx['task'])}</div>
+    </section>
+    <div class="dash"></div>
+    <section class="receipt-section duration-section">
+      {_section_heading("Duration", "duration")}
+      <div class="duration-value">{html.escape(ctx['duration'])}</div>
+    </section>
+    {token_section}
+    {cost_section}
+    <div class="dash"></div>
+    {files_tools}
+    {file_list_html}
+    {tests_git_html}
+    <div class="dash"></div>
+    <section class="status-section">
+      <div class="stamp-wrap"><div class="stamp">{html.escape(ctx['stamp'])}</div></div>
+      <div class="thanks">Great work. Ship more.</div>
+    </section>
+    <div class="dash"></div>
+    {barcode_html}
+    {printed_html}
+    </div>
+    <div class="feed-strip feed-extra" data-extra>
+      <div class="tear-hint" data-tear><span class="tear-rule"></span><span>TEAR HERE</span><span class="tear-rule"></span></div>
+    </div>
+    <div class="paper-curl" aria-hidden="true"><div class="paper-curl-clip"><div class="paper-curl-face"><div class="paper-curl-edges"></div></div></div><div class="paper-curl-shadow"></div></div>
+  </div></div>
+  <div class="actions">
+    <button class="action-btn" type="button" data-action="save">Save</button>
+    <button class="action-btn action-ghost" type="button" data-action="reprint">Print again</button>
+  </div>
+  <div class="close-hint">Drag to read · pull the paper edges to feed · click outside or press <kbd>Esc</kbd> to close</div>
+</div>'''
+
+    return ("<!DOCTYPE html>\n<html>\n<head>\n" + _html_head()
             + "\n</head>\n<body>\n" + body
-            + '\n<script src="' + JS_FILENAME + '"></script>\n</body>\n</html>\n')
+            + "\n<script>\n" + _html_script() + "\n</script>\n</body>\n</html>\n")

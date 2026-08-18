@@ -8,6 +8,10 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _receipt as R
+try:
+    import present_receipt as P
+except Exception:
+    P = None
 
 
 def main():
@@ -26,6 +30,15 @@ def main():
             json.dump(state, f)
     except Exception:
         pass
+
+    # Warm the macOS native viewer while the session is starting. This keeps the
+    # SessionEnd hook fast enough to survive Claude Code's short end-of-session
+    # budget. On non-macOS systems this is a no-op.
+    if P and R.OPEN_ON_END and R.VIEWER_MODE in ("native", "auto"):
+        try:
+            P.ensure_native_viewer()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

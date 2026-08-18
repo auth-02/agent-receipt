@@ -1,0 +1,20 @@
+{
+  "receipt": {
+    "show_files": true,
+    "show_tools": true,
+    "show_tokens": true,
+    "show_cost": true,
+    "show_barcode": true,
+    "show_git": true,
+    "show_tests": false,
+    "show_file_list": false,
+    "show_printed": true,
+    "print_speed": "Slow",
+    "bend": 5,
+    "leader": 60
+  },
+  "viewer": {
+    "mode": "native",
+    "open_on_end": true
+  }
+}

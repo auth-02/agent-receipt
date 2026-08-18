@@ -1,6 +1,6 @@
 {
   "name": "agent-receipt-marketplace",
-  "description": "Session-summary tooling for Claude Code — prints a thermal-receipt recap of each session.",
+  "description": "Interactive on-screen thermal receipt for a Claude Code session.",
   "owner": {
     "name": "Agent Receipt"
   },
@@ -8,7 +8,8 @@
     {
       "name": "agent-receipt",
       "source": "./",
-      "description": "Prints a thermal-receipt session summary when a Claude Code session ends."
+      "description": "Interactive on-screen thermal receipt for a Claude Code session."
     }
-  ]
+  ],
+  "version": null
 }

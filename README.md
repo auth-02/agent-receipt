@@ -1,215 +1,227 @@
 # Agent Receipt
 
-A Claude Code plugin that prints a **thermal-receipt session summary** when a
-coding session ends — the way a till prints a receipt when you check out.
+A Claude Code plugin that turns the end of a coding session into a **thermal receipt** — printed as a small animated receipt directly on your screen.
 
-It hooks the session lifecycle, reconstructs what happened from the session
-transcript and git, and "prints" a receipt: the task, duration, token usage, and
-what the session *would* cost — stamped **SHIPPED**, with a scannable Code 128
-barcode of the resume command.
+It reconstructs the session from the transcript and git, then shows what you worked on, how long it took, token usage, hypothetical API cost, changes, tools and a resume barcode.
 
-**About the cost.** Most people run Claude Code on a flat-fee plan (Pro / Max /
-Team), so a session isn't actually billed per token. The receipt's figure is a
-*hypothetical* — "what this session would cost if your agent were on
-pay-as-you-go API pricing" — computed at API rates and labelled **not charged
-to your plan**. That contrast is the point: it shows the value your flat plan is
-absorbing, not a bill.
+The receipt is deliberately **not a dashboard**. It is a checkout moment for AI-assisted coding.
 
-```
+```text
 ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱
 
           AGENT RECEIPT
          SESSION SUMMARY
   anthropic.com / claude / code
 
-┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 Receipt no.·······AR-2608-3942
 Date·······12 Aug 2026 · 20:17
 Workspace···········~/src/orbit-api
-...
-IF BILLED PAY-AS-YOU-GO····$0.18
-    Estimated API cost · USD
+Agent···············Claude Code
+Model···············claude-opus-4-8
+Task················Implement session persistence
 
-           [ SHIPPED ]
+┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+
+◷  DURATION                         27m 14s
+
+◈  USAGE
+   Input tokens····················18,732
+   Output tokens·················· 7,512
+   Cache read tokens··············12,104
+   ─────────────────────────────────────
+   Total tokens···················26,244
+
+▣  COMPUTE (IF BILLED PAY-AS-YOU-GO)
+   Input··························  $0.12
+   Output·························  $0.06
+   Cache discount················· -$0.00
+   ─────────────────────────────────────
+   Estimated API cost·············· $0.18
+   Not charged to your plan
+
+   CHANGES       🔧 TOOLS USED
+   Files changed  8       Total tool calls  37
+   Insertions   +421       Unique tools      12
+   Deletions     -87
+
+             [ SHIPPED ]
+
+          Great work. Ship more.
+
+                 ║║║║║║║║║║║
+             Resume with:
+          claude --resume AR-2608-3942
 ```
 
-The design comes from the *Agent Receipt* concept in Claude Design; this plugin
-is the working implementation of it.
+## What happens when a session ends
 
-## Demo
-
-The saved HTML receipt printing and scrolling in the browser:
-
-![Agent Receipt printing in the browser](demo/agent-receipt.gif)
-
-## What it produces
-
-Every time a session ends the plugin:
-
-1. **Prints the ANSI thermal receipt right in the terminal** — no browser, no
-   extra step. It writes to the real terminal (`/dev/tty`) and feeds the
-   receipt out line by line, like paper off a thermal printer (falls back to a
-   plain print if no terminal is attached).
-2. Saves a self-contained **HTML receipt** in the Broadsheet look (Source
-   Serif 4, paper ground, cyan/magenta press accents, a real barcode) and a
-   plain-text receipt to `~/.claude/agent-receipt/receipts/`.
-
-The terminal receipt is text + ANSI color (that's all any terminal can draw);
-the HTML is the framed version with the full print animation, for when you want
-to keep or share one.
-
-## How it works
-
-Two lifecycle hooks plus one on-demand command, all pure standard-library
-Python 3 (no dependencies):
-
-| Piece | Script | Job |
-| --- | --- | --- |
-| `SessionStart` hook | `scripts/session_start.py` | Records the start time and the git `HEAD` before any work — the two things only knowable at the start. |
-| `SessionEnd` hook | `scripts/session_end.py` | Rebuilds the session and prints/saves the receipt. |
-| `/agent-receipt` command | `scripts/receipt_now.py` | Prints a receipt for the *current* session on demand, mid-session. |
-
-The receipt is recovered from the session **transcript** (`transcript_path` in
-the hook payload):
-
-- **Model / agent version** — from the assistant messages.
-- **Tokens & hypothetical cost** — summed `usage` fields, priced per model at
-  **API pay-as-you-go rates** from the table in `_receipt.py` (`claude-opus-4-8`
-  → Opus rates, etc.), with a family fallback. `Subtotal` prices every token at
-  the input rate; `Cache discount` is the saving from cached reads; the total is
-  what the session *would* cost on the API — explicitly **not** a charge to a
-  flat Pro/Max/Team plan.
-- **Task** — Claude Code's own session title (the `ai-title`); if none exists
-  yet, a headline is synthesized from the first *real* user prompt (caveat and
-  slash-command boilerplate are skipped).
-
-Three sections are **opt-in** (off by default — flip a constant to include them):
-
-- **Files changed** (`+`/`−` per file, from git: committed-since-start plus
-  staged and unstaged) — `SHOW_FILES`.
-- **Tools used** (counted from `tool_use` blocks) — `SHOW_TOOLS`.
-- **Started / Ended** times (Duration always shows) — `SHOW_TIMES`.
-
-If the transcript is missing, or a section's data isn't available, the receipt
-still prints — it just drops what it can't fill.
-
-### Seeing it on `/exit`
-
-The receipt is **always saved** to `~/.claude/agent-receipt/receipts/` on every
-graceful exit (`/exit`, `/quit`, Ctrl-D). If you run the fullscreen TUI
-(`"tui": "fullscreen"`), the terminal print is wiped when Claude restores your
-screen — so open the saved HTML instead. Add this alias to see the latest:
-
-```bash
-# ~/.zshrc — then run `receipt` after any session
-alias receipt='open "$(ls -t ~/.claude/agent-receipt/receipts/*.html | head -1)"'
+```text
+Claude Code
+    │
+    ├── SessionStart → record start + git HEAD
+    │
+    ├── work normally
+    │
+    └── SessionEnd
+          │
+          ├── reconstruct session
+          ├── save one standalone HTML receipt
+          └── present receipt
+                 │
+                 ├── native on-screen viewer (macOS)
+                 ├── browser fallback
+                 └── "Receipt unavailable" if neither works
 ```
 
-(Linux: swap `open` for `xdg-open`.)
+The native viewer is a transparent, borderless window over the current screen. The receipt feeds out from a small print head, plays its ink/stamp animation, and then **stays visible until you close it**. Clicking outside or pressing `Esc` closes it.
 
-## The `/agent-receipt` command
+There is intentionally **no terminal receipt fallback** and no alias required.
 
-Type `/agent-receipt` any time during a session to print its receipt-so-far
-without ending the session. It finds the current project's transcript, reuses
-the live SessionStart state for an accurate start time, prints to the terminal,
-and saves an HTML/TXT copy. A mid-session receipt is stamped **ONGOING**
-instead of **SHIPPED**.
+## Session lifecycle
+
+Claude Code's `SessionEnd` event supplies a termination reason. The plugin preserves that reason instead of treating every exit as a successful shipment:
+
+| Reason | Receipt stamp |
+| --- | --- |
+| `prompt_input_exit` | **SHIPPED** |
+| `clear` | **CLEARED** |
+| `resume` | **RESUMED** |
+| `logout` | **LOGGED OUT** |
+| `bypass_permissions_disabled` | **ENDED** |
+| `other` | **ENDED** |
+
+`/agent-receipt` remains a manual **ONGOING** snapshot. Interrupting an individual agent turn does not create a receipt unless Claude Code actually emits `SessionEnd`.
+
+A session switched with `/resume` is treated as its own receipt. The resume barcode points back to the session ID so the receipt can be used as a continuation point.
+
+## Receipt contents
+
+The field order is intentionally stable and follows the physical-receipt design:
+
+1. Receipt number, date, workspace, agent, model and task
+2. Duration
+3. Token usage
+4. Hypothetical pay-as-you-go compute cost
+5. Changes and tools used
+6. Status stamp
+7. Resume barcode
+
+Files, tools, start/end timestamps, token usage, cost and barcode can be independently configured. The default configuration matches the full receipt shown above.
+
+### About cost
+
+Most Claude Code users are on a flat-fee plan, so this is **not a bill**. The amount is the hypothetical API value of the session if those tokens had been consumed through pay-as-you-go API pricing. It is explicitly labelled **Not charged to your plan**.
+
+## Provider architecture
+
+Claude Code is the only provider today, but provider-specific behavior is isolated behind a small adapter boundary:
+
+```text
+                    Receipt Engine
+                         │
+                 normalized session data
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+       ClaudeCodeProvider       future provider
+              │
+        transcript parsing
+        model pricing
+        lifecycle mapping
+        resume command
+```
+
+The receipt renderer, storage, native viewer and browser fallback do not know how a provider produced the session data.
+
+Adding another agent later should mean adding a provider adapter rather than rewriting the receipt engine.
 
 ## Install
 
-**As a plugin (recommended) — zero further config.** The repo doubles as a
-single-plugin marketplace. Once installed, the hooks in `hooks/hooks.json`
-activate automatically the moment the plugin is enabled — you never touch
-`settings.json`, and every session from then on prints its receipt.
+**As a Claude Code plugin:**
 
-From GitHub:
-
-```
+```text
 /plugin marketplace add auth-02/agent-receipt
 /plugin install agent-receipt@agent-receipt-marketplace
 ```
 
-(`auth-02/agent-receipt` is GitHub `owner/repo` shorthand; the full
-`https://github.com/auth-02/agent-receipt.git` URL works too. For local
-development, point `marketplace add` at a checkout path instead.)
+No alias or `settings.json` changes are required when installed as a plugin.
 
-**Or wire the hooks directly** in `~/.claude/settings.json` (no plugin system):
+Requires Python 3. On macOS, the native viewer is compiled and warmed during `SessionStart`; the saved HTML is used directly if the native viewer cannot be launched.
+
+## Configuration
+
+Configuration lives at:
+
+```text
+~/.claude/agent-receipt/config.json
+```
+
+Example:
 
 ```json
 {
-  "hooks": {
-    "SessionStart": [
-      { "hooks": [ { "type": "command",
-        "command": "python3 \"/Users/user/agents/agent-receipt/scripts/session_start.py\"" } ] }
-    ],
-    "SessionEnd": [
-      { "hooks": [ { "type": "command",
-        "command": "python3 \"/Users/user/agents/agent-receipt/scripts/session_end.py\"" } ] }
-    ]
+  "receipt": {
+    "show_files": true,
+    "show_tools": true,
+    "show_times": false,
+    "show_tokens": true,
+    "show_cost": true,
+    "show_barcode": true,
+    "print_speed": "Slow"
+  },
+  "viewer": {
+    "mode": "native",
+    "open_on_end": true
   }
 }
 ```
 
-Requires `python3` and (for the git section) `git` on `PATH`.
+`viewer.mode` can be `native`, `browser`, or `auto`.
 
-## Configuration
+The receipt is saved as a **single standalone HTML file** under:
 
-The flags live in code — edit the constants at the top of `scripts/_receipt.py`:
-
-```python
-SHOW_FILES = False       # include the "Files changed" section (needs git)
-SHOW_TOOLS = False       # include the "Tools used" section
-SHOW_TIMES = False       # include Started / Ended rows (Duration always shows)
-PRINT_SPEED = "Slow"     # animation speed: "Slow" | "Normal" | "Instant"
-ANIMATE = True           # feed the terminal receipt out line by line
-CLEAR_SCREEN = False     # clear the screen before printing the terminal receipt
+```text
+~/.claude/agent-receipt/receipts/
 ```
 
-Two things stay environment variables (they're not receipt options):
+CSS and JavaScript are embedded into the saved receipt, so the file can be opened or shared without adjacent assets.
 
-- `AGENT_RECEIPT_DIR` — where receipts are saved (default
-  `~/.claude/agent-receipt/receipts`).
-- `NO_COLOR` / `AGENT_RECEIPT_NO_COLOR` — disable ANSI color in the terminal
-  receipt.
+## `/agent-receipt`
 
-## The receipt animation
+During a live Claude Code session, run:
 
-The saved HTML reproduces the design's "printing" animation: the paper rolls
-down under a moving print-head, each line inks in a beat after the last, and the
-stamp lands at the end. It's all CSS (`assets/receipt.css`) driven off one
-`--pr` speed variable, and it honours `prefers-reduced-motion`. Structure, style
-and behaviour are kept in separate files — the markup links `receipt.css` and
-`receipt.js`, both copied next to each saved receipt so it stays portable.
-
-`assets/receipt.js` **auto-scrolls the page** in lockstep with the animation, so
-the receipt feeds out of view like paper off a printer rather than printing
-below the fold; it reads the real animation timing from the CSS and bows out the
-moment you scroll by hand. (The terminal receipt animates as it feeds out; the
-HTML has the full CSS version.)
-
-The terminal animation writes each line to the real terminal (`/dev/tty`) and
-resets any scroll region the host TUI left set, so a normal terminal scrolls to
-follow the print. Inside a live TUI a subprocess can't fully control scrolling,
-so this is most reliable at real session end (when the TUI has stood down); the
-browser receipt is the guaranteed-smooth one.
-
-## Layout
-
+```text
+/agent-receipt
 ```
+
+It creates a snapshot without ending the session. The receipt is stamped **ONGOING** and uses the same presentation surface as the final receipt.
+
+## Project layout
+
+```text
 agent-receipt/
 ├── .claude-plugin/
-│   ├── plugin.json         plugin manifest
-│   └── marketplace.json    single-plugin marketplace
+│   ├── plugin.json
+│   └── marketplace.json
 ├── hooks/
-│   └── hooks.json          SessionStart + SessionEnd wiring
+│   └── hooks.json
 ├── commands/
-│   └── agent-receipt.md     the /agent-receipt slash command
+│   └── agent-receipt.md
 ├── assets/
-│   ├── receipt.css         standalone stylesheet for the HTML receipt
-│   └── receipt.js          auto-scroll behaviour for the HTML receipt
+│   ├── receipt.css
+│   └── receipt.js
+├── viewer/
+│   └── AgentReceiptViewer.swift
+├── config.example.json
 └── scripts/
-    ├── _receipt.py         shared logic: parse, price, render (ANSI/HTML/TXT)
-    ├── session_start.py    SessionStart hook
-    ├── session_end.py      SessionEnd hook
-    └── receipt_now.py      engine for /agent-receipt (on-demand)
+    ├── providers/
+    │   ├── base.py
+    │   ├── claude_code.py
+    │   └── __init__.py
+    ├── _receipt.py
+    ├── present_receipt.py
+    ├── session_start.py
+    ├── session_end.py
+    └── receipt_now.py
 ```
