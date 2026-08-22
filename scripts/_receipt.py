@@ -583,11 +583,12 @@ def render_html(ctx):
           {_h_rows([
               ("Input", fmt_money(cost(ctx["tok_in"], ctx["pricing"]["in"])), True),
               ("Output", fmt_money(cost(ctx["tok_out"], ctx["pricing"]["out"])), True),
-              ("Cache discount", fmt_money(-ctx["discount"]), True),
+              ("Cache write", fmt_money(cost(ctx["tok_cw"], ctx["pricing"]["cw"])), True),
+              ("Cache read", fmt_money(cost(ctx["tok_cr"], ctx["pricing"]["cr"])), True),
           ])}
           <div class="rule"></div>
           <div class="row total-row api-total"><span>Estimated API cost</span><span class="lead"></span><span class="num">{fmt_money(ctx["total"])}</span></div>
-          <div class="not-charged">Not charged to your plan</div>
+          <div class="not-charged">{("Cache saved " + fmt_money(ctx["discount"]) + " · ") if ctx["discount"] >= 0.005 else ""}Not charged to your plan</div>
         </section>'''
         else:
             cost_section = f'''
