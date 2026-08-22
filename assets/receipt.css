@@ -613,7 +613,24 @@ html.native-viewer .stage { background: rgba(4,6,9,.10); }
    (and printer) are captured. */
 .stage.exporting .actions,
 .stage.exporting .close-hint,
+.stage.exporting .ar-toast,
 .stage.exporting .close { visibility: hidden; }
+
+/* Full-receipt export: the native viewer resizes its web view to the receipt's
+   full height and snapshots it. We must unclip the paper window, cancel the
+   feed/pan transform, and drop the print-reveal clip so the ENTIRE receipt is
+   laid out and painted (not just the on-screen portion). */
+html.export-full, html.export-full body { overflow: visible; }
+html.export-full .paperwrap {
+  overflow: visible;
+  bottom: auto;
+  height: auto;
+}
+html.export-full .paper-roll {
+  transform: none !important;
+  animation: none !important;
+  clip-path: none !important;
+}
 
 .close-hint {
   position: fixed;

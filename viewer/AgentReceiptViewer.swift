@@ -14,33 +14,58 @@ final class SaveImageHandler: NSObject, WKScriptMessageHandler {
     weak var window: NSWindow?
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let webView = webView else { return }
-        let config = WKSnapshotConfiguration()  // whole visible view
-        webView.takeSnapshot(with: config) { image, _ in
-            DispatchQueue.main.async {
-                guard let image = image,
-                      let tiff = image.tiffRepresentation,
-                      let rep = NSBitmapImageRep(data: tiff),
-                      let png = rep.representation(using: .png, properties: [:]) else { return }
-                let panel = NSSavePanel()
-                panel.allowedFileTypes = ["png"]
-                panel.nameFieldStringValue = "agent-receipt.png"
-                panel.canCreateDirectories = true
-                NSApp.activate(ignoringOtherApps: true)
-                let write: (NSApplication.ModalResponse) -> Void = { response in
-                    if response == .OK, let url = panel.url {
-                        try? png.write(to: url)
+        // A long receipt drapes off-screen (clipped by the paper window), so a
+        // plain snapshot of the visible view would omit the lower sections.
+        // Ask the page to flatten to its full height, grow the web view to that
+        // height so WebKit lays out and renders the whole receipt, snapshot it,
+        // then restore the view and the page's interactive layout.
+        let originalFrame = webView.frame
+        webView.evaluateJavaScript("window.__arBeginExport && window.__arBeginExport()") { result, _ in
+            var fullWidth = originalFrame.width
+            var fullHeight = originalFrame.height
+            if let dims = result as? [String: Any] {
+                if let w = dims["width"] as? Double, w > 0 { fullWidth = CGFloat(w) }
+                if let h = dims["height"] as? Double, h > 0 { fullHeight = CGFloat(h) }
+            }
+            webView.frame = NSRect(x: 0, y: 0, width: fullWidth, height: fullHeight)
+            // Give layout a beat to settle at the new height before snapshotting.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                let config = WKSnapshotConfiguration()
+                config.rect = NSRect(x: 0, y: 0, width: fullWidth, height: fullHeight)
+                webView.takeSnapshot(with: config) { image, _ in
+                    DispatchQueue.main.async {
+                        webView.frame = originalFrame
+                        webView.evaluateJavaScript("window.__arEndExport && window.__arEndExport()", completionHandler: nil)
+                        self.presentSavePanel(for: image)
                     }
                 }
-                // The receipt window floats above normal windows, so a free-standing
-                // panel would open behind it. Attaching it as a sheet keeps it in
-                // front of the receipt; fall back to a raised-level panel.
-                if let window = self.window {
-                    panel.beginSheetModal(for: window, completionHandler: write)
-                } else {
-                    panel.level = .modalPanel
-                    panel.begin(completionHandler: write)
-                }
             }
+        }
+    }
+
+    private func presentSavePanel(for image: NSImage?) {
+        guard let image = image,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return }
+        let panel = NSSavePanel()
+        panel.allowedFileTypes = ["png"]
+        panel.nameFieldStringValue = "agent-receipt.png"
+        panel.canCreateDirectories = true
+        NSApp.activate(ignoringOtherApps: true)
+        let write: (NSApplication.ModalResponse) -> Void = { response in
+            if response == .OK, let url = panel.url {
+                try? png.write(to: url)
+            }
+        }
+        // The receipt window floats above normal windows, so a free-standing
+        // panel would open behind it. Attaching it as a sheet keeps it in
+        // front of the receipt; fall back to a raised-level panel.
+        if let window = self.window {
+            panel.beginSheetModal(for: window, completionHandler: write)
+        } else {
+            panel.level = .modalPanel
+            panel.begin(completionHandler: write)
         }
     }
 }

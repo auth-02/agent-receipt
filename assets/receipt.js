@@ -236,18 +236,40 @@
         return window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.saveImage;
       } catch (err) { return null; }
     }
+    // The native viewer drives the export: it calls __arBeginExport to flatten
+    // the receipt and report its FULL pixel size, resizes its web view to that
+    // height so off-screen content renders, snapshots, then calls __arEndExport.
+    // This is what makes the saved image contain the whole receipt rather than
+    // just the part visible on screen.
+    window.__arBeginExport = function () {
+      stage.classList.add("exporting");
+      document.documentElement.classList.add("export-full");
+      // Dismiss the "Choose where to save…" toast so it never lands in the PNG.
+      if (toastEl) toastEl.classList.remove("is-shown");
+      clearTimeout(toastTimer);
+      stopAnim();
+      ready = true;
+      pan = 0; apply();
+      // Force a reflow so the flattened, unclipped layout is measured.
+      var rect = roll.getBoundingClientRect();
+      return {
+        width: Math.ceil(document.documentElement.clientWidth || window.innerWidth),
+        height: Math.ceil(rect.top + roll.offsetHeight + 16)
+      };
+    };
+    window.__arEndExport = function () {
+      stage.classList.remove("exporting");
+      document.documentElement.classList.remove("export-full");
+      measure();
+    };
+
     function saveReceipt() {
       if (nativeSaveImage()) {
-        // Hide the chrome, let it paint, then ask the native viewer to snapshot
-        // the receipt and open a Save panel so the user picks any location.
-        stage.classList.add("exporting");
+        // Ask the native viewer to snapshot the full receipt and open a Save
+        // panel so the user picks any location. All export layout prep happens
+        // in the viewer via __arBeginExport / __arEndExport (above).
         flash("Choose where to save the image…");
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            try { window.webkit.messageHandlers.saveImage.postMessage("save"); } catch (err) {}
-            setTimeout(function () { stage.classList.remove("exporting"); }, 900);
-          });
-        });
+        try { window.webkit.messageHandlers.saveImage.postMessage("save"); } catch (err) {}
         return;
       }
       // Browser fallback: no native snapshot bridge — save a standalone HTML copy.
